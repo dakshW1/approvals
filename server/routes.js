@@ -17,7 +17,8 @@ const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
+  // Vercel caps a request body at 4.5 MB, so keep each file under 4 MB.
+  limits: { fileSize: 4 * 1024 * 1024 },
   fileFilter: (req, file, cb) => cb(null, /\.(pdf|png|jpe?g)$/i.test(file.originalname)),
 });
 

@@ -66,9 +66,16 @@ Only these three can sign in. The other sample officers and principals exist as 
 6. **Institution**: see the alert, upload the missing documents, Resubmit.
 7. **Admin** → Audit Trail: show the full history and download the CSV.
 
-## Deploying for free (optional)
+## Deploying to Vercel (free)
 
-Render.com free web service: build command `npm install && npm run build`, start command `npm start`. The disk is temporary, so the sample data is re-seeded on each restart, which is fine for a demo.
+The frontend is served from Vercel's CDN, and `api/index.js` runs the same Express app as a serverless function. `vercel.json` already sets the build, routing and a daily alert cron.
+
+1. On vercel.com, choose **Add New → Project**, import `dakshW1/approvals`, and leave the framework preset as **Other**.
+2. Under **Environment Variables**, add the same keys as your `.env`: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`. For `DATABASE_URL`, use Supabase's **Transaction pooler** string (port `6543`). Optionally add a random `CRON_SECRET`.
+3. Click **Deploy**.
+4. In Supabase → Authentication → URL Configuration, set Site URL to your Vercel URL and add `https://<your-app>.vercel.app/reset-password` to Redirect URLs.
+
+On Vercel each uploaded file is limited to 4 MB, because of Vercel's request size limit. Time-based alerts are rescanned during normal use, at most every 5 minutes, and by the daily cron.
 
 ## Future scope
 

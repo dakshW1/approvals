@@ -139,7 +139,7 @@ export default function NewApplication() {
                 {required.length - missingCount} of {required.length} attached
               </span>
             </div>
-            <p className="muted small">PDF, JPG or PNG up to 10 MB. You can submit with documents missing and upload them later, but the officer cannot approve until all are verified.</p>
+            <p className="muted small">PDF, JPG or PNG up to 4 MB each. You can submit with documents missing and upload them later, but the officer cannot approve until all are verified.</p>
             <ul className="docs">
               {required.map((t) => {
                 const expiring = meta.EXPIRING_DOC_TYPES.includes(t);

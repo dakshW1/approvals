@@ -15,7 +15,7 @@ export const supabaseAdmin = createClient(url, key, {
 export const BUCKET = 'documents';
 
 export async function ensureBucket() {
-  const { error } = await supabaseAdmin.storage.createBucket(BUCKET, { public: false, fileSizeLimit: 10 * 1024 * 1024 });
+  const { error } = await supabaseAdmin.storage.createBucket(BUCKET, { public: false, fileSizeLimit: 4 * 1024 * 1024 });
   if (error && !/exist/i.test(error.message)) throw error;
 }
 

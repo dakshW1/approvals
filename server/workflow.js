@@ -229,7 +229,7 @@ export async function createApplication(user, body, files) {
 export async function uploadDocument(appId, user, docType, file, expiryDate) {
   const app = await one('SELECT * FROM applications WHERE id = ?', [appId]);
   if (!app || !canView(app, user)) throw new HttpError(404, 'Application not found.');
-  if (!file) throw new HttpError(400, 'Choose a PDF, JPG or PNG file under 10 MB.');
+  if (!file) throw new HttpError(400, 'Choose a PDF, JPG or PNG file under 4 MB.');
   if (!OPEN_STATUSES.includes(app.status) && !EXPIRING_DOC_TYPES.includes(docType))
     throw new HttpError(400, 'This application is closed. Only renewed certificates can be uploaded.');
   await tx(async () => {
