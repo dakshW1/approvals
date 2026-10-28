@@ -6,11 +6,12 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
-// Supabase Postgres. Use the "Session pooler" connection string (works on IPv4 networks).
+// Supabase Postgres via its pooler (IPv4). Locally the session pooler (port 5432) is fine; on Vercel use the
+// transaction pooler (port 6543), and keep few connections per serverless instance.
 export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  max: 6,
+  max: process.env.VERCEL ? 2 : 6,
 });
 
 export const nowIso = () => new Date().toISOString();
