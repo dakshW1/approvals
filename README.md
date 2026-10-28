@@ -1,0 +1,75 @@
+# AICTE Approval Workflow Automation, Compliance Monitoring & Alert Management System
+
+SIH prototype. A web app where institutions submit AICTE approval applications, the system routes them to the right officer, checks them against norms, tracks deadlines, raises alerts and keeps a full audit trail.
+
+## Tech stack (all free, no accounts needed)
+
+| Layer | Choice |
+|---|---|
+| Frontend | React 18 + Vite, React Router, plain CSS (Bricolage Grotesque + Manrope, same design language as Clausewise and Kilometre) |
+| Backend | Node.js + Express |
+| Auth | Supabase Auth: email + password, institution self-registration, password reset by email |
+| Database | Supabase Postgres (tables are created automatically, with Row Level Security on) |
+| File uploads | Supabase Storage, private `documents` bucket, served through short-lived signed links |
+| Live updates | Supabase Realtime pushes new notifications to the bell instantly |
+| Alerts | In-process scheduler, runs every 5 minutes and after every action |
+
+Requires **Node.js 22.13 or newer** (tested on Node 24) and a free Supabase project.
+
+## Set up Supabase (one time)
+
+1. Create a free project at supabase.com.
+2. Copy `.env.example` to `.env` and fill in the values from the project: URL, service role (secret) key, anon (publishable) key and the **Session pooler** connection string.
+3. Authentication → URL Configuration: set Site URL to `http://localhost:4000` and add `http://localhost:4000/reset-password` to Redirect URLs.
+4. Optional, for the demo: Authentication → Providers → Email → turn off "Confirm email" so new institutions can sign in straight away.
+
+## Run it
+
+```bash
+npm install
+npm run build      # build the frontend (re-run after changing .env)
+npm start          # http://localhost:4000. The first start creates tables and loads sample data.
+```
+
+For development with hot reload: `npm run dev`, then open http://localhost:5173.
+
+To reset to fresh sample data: `npm run seed` (stop the server first). Demo logins are kept.
+
+### Demo accounts (password `demo123`)
+
+| Role | Email |
+|---|---|
+| Institution (Shri Venkatesh Institute of Technology, Pune) | `college@aicte.demo` |
+| Scrutiny Officer (Rajiv Menon, West) | `officer@aicte.demo` |
+| Administrator (Approval Bureau) | `admin@aicte.demo` |
+
+Only these three can sign in. The other sample officers and principals exist as records so assignment and workload look realistic. New institutions can register from the sign-in page.
+
+## Features mapped to the problem statement
+
+1. **Application management**: institution details, application records, submission dates, required documents and status, all in one database.
+2. **Automated officer assignment**: the rule is category → eligible designation → officer handles that category → has free capacity → same region preferred → lowest workload. The reason is stored in the audit trail. Admins can reassign manually or automatically, and can pause an officer.
+3. **Document verification**: required documents for each category, missing-document detection, officer verify/reject with a remark, and the institution is notified so it can re-upload.
+4. **Compliance monitoring**: a live compliance score from 7 checks (documents uploaded, documents verified, faculty-student ratio, land area, built-up area, certificate validity, processing deadline). Approval is blocked until every check passes. Institutions see a readiness check before they submit.
+5. **Automated alerts**: deadline approaching, overdue (escalated to admin), missing documents, review not started, rejected documents, certificates expiring or expired (also after approval), and status changes.
+6. **Centralized dashboard**: total, pending, action required, approved, overdue and compliance-alert counts, status and category breakdowns, items needing attention, officer workload and recent activity. Each role sees only its own data.
+7. **Status tracking**: Submitted → Under Review → Action Required → Approved / Rejected, with a progress stepper, enforced transitions per role, and a timeline with remarks.
+8. **Audit trail & reports**: every sign-in, submission, assignment, upload, review and status change is logged with user and time. CSV export of applications and of the audit log.
+
+## 3-minute demo script
+
+1. **Admin** → Dashboard: 3 overdue, compliance alerts, officer workload. Open the bell to show the escalations.
+2. Open *Deccan Plateau Engineering College*: Action Required, overdue on the institution side, a rejected document, and the assignment reason.
+3. **Officers & Rules**: explain the assignment rules and norms, and pause an officer.
+4. **Sign out → Institution** → New Application: enter a program and set faculty to 10 to show the readiness check failing, fix it to 13, attach 2 documents, and submit. The app is auto-assigned to Dr. Sameer Kulkarni (West, lowest workload) rather than Rajiv Menon (West, busier).
+5. **Sign out → Officer** (`sameer.kulkarni@aicte.demo`): open it, Start review, try Approve (blocked because documents are missing), then Request action with a remark.
+6. **Institution**: see the alert, upload the missing documents, Resubmit.
+7. **Admin** → Audit Trail: show the full history and download the CSV.
+
+## Deploying for free (optional)
+
+Render.com free web service: build command `npm install && npm run build`, start command `npm start`. The disk is temporary, so the sample data is re-seeded on each restart, which is fine for a demo.
+
+## Future scope
+
+OCR/AI document verification, integration with official AICTE data and officer directories, DigiLocker and Aadhaar eSign, SMS, WhatsApp and email alerts, duplicate faculty detection across institutions, risk scoring for inspections, and a mobile app for geo-tagged inspections.
