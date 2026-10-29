@@ -2,7 +2,7 @@ import express from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { migrate } from './db.js';
+import { migrate, backfillCampusLocations } from './db.js';
 import { ensureBucket } from './supabase.js';
 import { seedIfEmpty } from './seed.js';
 import { router } from './routes.js';
@@ -15,6 +15,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let ready;
 export const init = () => (ready ||= (async () => {
   await migrate();
+  await backfillCampusLocations();
   await ensureBucket();
   await seedIfEmpty();
 })().catch((err) => {

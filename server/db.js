@@ -176,6 +176,39 @@ export async function migrate() {
       updated_by INTEGER REFERENCES profiles(id) ON DELETE SET NULL
     );
     ALTER TABLE rule_versions ENABLE ROW LEVEL SECURITY;
+    -- Site inspections by the expert committee, with geo-tagged photos checked against the campus location.
+    ALTER TABLE institutions ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
+    ALTER TABLE institutions ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;
+    CREATE TABLE IF NOT EXISTS inspections (
+      id SERIAL PRIMARY KEY,
+      application_id INTEGER UNIQUE NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+      status TEXT NOT NULL CHECK (status IN ('SCHEDULED','COMPLETED')),
+      scheduled_for TEXT NOT NULL,
+      committee TEXT,
+      findings TEXT,
+      recommendation TEXT CHECK (recommendation IN ('SATISFACTORY','DEFICIENT')),
+      scheduled_by INTEGER REFERENCES profiles(id) ON DELETE SET NULL,
+      completed_by INTEGER REFERENCES profiles(id) ON DELETE SET NULL,
+      completed_at TEXT,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS inspection_photos (
+      id SERIAL PRIMARY KEY,
+      inspection_id INTEGER NOT NULL REFERENCES inspections(id) ON DELETE CASCADE,
+      stored_name TEXT NOT NULL,
+      caption TEXT,
+      lat DOUBLE PRECISION,
+      lng DOUBLE PRECISION,
+      accuracy_m DOUBLE PRECISION,
+      location_source TEXT,
+      taken_at TEXT,
+      distance_m DOUBLE PRECISION,
+      uploaded_by INTEGER REFERENCES profiles(id) ON DELETE SET NULL,
+      uploaded_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_photos_insp ON inspection_photos(inspection_id);
+    ALTER TABLE inspections ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE inspection_photos ENABLE ROW LEVEL SECURITY;
     -- Conversation between the institution and AICTE staff on one application.
     CREATE TABLE IF NOT EXISTS comments (
       id SERIAL PRIMARY KEY,
@@ -217,8 +250,21 @@ export async function migrate() {
   `);
 }
 
+// Sample institutions get their city's coordinates as the campus location, once.
+export async function backfillCampusLocations() {
+  const { CITY_COORDS } = await import('./rules.js');
+  const rows = Object.entries(CITY_COORDS);
+  const params = rows.flatMap(([city, [lat, lng]]) => [city, lat, lng]);
+  const values = rows.map((_, i) => `($${i * 3 + 1}, $${i * 3 + 2}::float8, $${i * 3 + 3}::float8)`).join(', ');
+  await pool.query(
+    `UPDATE institutions i SET lat = v.lat, lng = v.lng FROM (VALUES ${values}) AS v(city, lat, lng)
+     WHERE i.lat IS NULL AND i.city = v.city`,
+    params
+  );
+}
+
 export async function dropAll() {
   await pool.query(`
-    DROP TABLE IF EXISTS rule_versions, comments, settings, notifications, audit_log, status_history, documents, applications, profiles, institutions CASCADE;
+    DROP TABLE IF EXISTS inspection_photos, inspections, rule_versions, comments, settings, notifications, audit_log, status_history, documents, applications, profiles, institutions CASCADE;
   `);
 }

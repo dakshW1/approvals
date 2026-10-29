@@ -71,6 +71,26 @@ export const SLA = {
 
 export const DESIGNATIONS = ['Assistant Director', 'Deputy Director'];
 
+// Categories that need an expert committee site visit before approval.
+export const INSPECTION_CATEGORIES = ['NEW_INSTITUTION', 'INCREASE_INTAKE'];
+// A photo counts as "on campus" within this distance of the recorded campus location.
+export const CAMPUS_RADIUS_M = 1500;
+
+// Approximate city-centre coordinates for the sample institutions (used as their campus location).
+export const CITY_COORDS = {
+  Pune: [18.5204, 73.8567], Jabalpur: [23.1815, 79.9864], Mysuru: [12.2958, 76.6394], Guwahati: [26.1445, 91.7362],
+  Jaipur: [26.9124, 75.7873], Chennai: [13.0827, 80.2707], Meerut: [28.9845, 77.7064], Kolkata: [22.5726, 88.3639],
+  Rajkot: [22.3039, 70.8022], Hyderabad: [17.385, 78.4867], Indore: [22.7196, 75.8577], Ratnagiri: [16.9902, 73.312],
+  Cuttack: [20.4625, 85.883], Mohali: [30.7046, 76.7179], Satna: [24.6005, 80.8322],
+};
+
+export function distanceMetres(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const rad = (d) => (d * Math.PI) / 180;
+  const a = Math.sin(rad(lat2 - lat1) / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lng2 - lng1) / 2) ** 2;
+  return Math.round(2 * R * Math.asin(Math.sqrt(a)));
+}
+
 // The objects above are the built-in defaults.
 //  - Deadlines (SLA) and assignment roles are global settings; applyGlobal() updates them in place.
 //  - Norms and required documents are versioned per academic year: each application is checked against the

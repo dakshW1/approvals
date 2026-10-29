@@ -14,6 +14,9 @@ export function deficiencies(data) {
       items.push(`${d.label}: rejected${d.doc.remark ? `. ${d.doc.remark.trim().replace(/\.+$/, '')}` : ''}. Upload a corrected copy.`);
     else if (d.doc.expiry_date && new Date(d.doc.expiry_date) < new Date()) items.push(`${d.label}: expired on ${fmt(d.doc.expiry_date)}. Upload a renewed certificate.`);
   }
+  const insp = data.site?.inspection;
+  if (insp?.status === 'COMPLETED' && insp.recommendation === 'DEFICIENT')
+    items.push(`Site inspection on ${fmt(insp.scheduled_for)} found the institution deficient: ${insp.findings.trim().replace(/\.+$/, '')}.`);
   return items;
 }
 

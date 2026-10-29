@@ -7,6 +7,7 @@ import {
   ASSIGNMENT_RULES, SLA, NORMS, addDays, daysUntil, evaluateCompliance, deadlineStatus, rulesForYear, requiredDocsFor,
 } from './rules.js';
 import { audit, notify, insertNotifications, alertsForApp, collegeUserIds, adminUserIds } from './alerts.js';
+import { inspectionBlocker, loadInspection } from './inspections.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -16,7 +17,7 @@ export class HttpError extends Error {
 }
 
 const BASE_SQL = `
-  SELECT a.*, i.name AS institution_name, i.type AS institution_type, i.city, i.state, i.region, i.aicte_code,
+  SELECT a.*, i.name AS institution_name, i.type AS institution_type, i.city, i.state, i.region, i.aicte_code, i.lat AS campus_lat, i.lng AS campus_lng,
          u.name AS officer_name, u.designation AS officer_designation
   FROM applications a
   JOIN institutions i ON i.id = a.institution_id
@@ -338,10 +339,18 @@ export function allowedActions(app, user) {
 
 export const MIN_EXCEPTION_REASON = 20;
 
-// Checks that stand between an application and approval. Missing documents can never be waived.
-export function approvalBlockers(compliance) {
+// Checks that stand between an application and approval. Missing documents and an unfinished
+// site inspection can never be waived; everything else can, with a recorded exception.
+export function approvalBlockers(compliance, inspection = null) {
   const blocking = compliance.checks.filter((ch) => ch.status !== 'pass');
-  return { blocking, overridable: !blocking.some((b) => b.key === 'docs_uploaded') };
+  if (inspection) blocking.push(inspection);
+  const hard = blocking.filter((b) => b.key === 'docs_uploaded' || b.hard);
+  return { blocking, overridable: hard.length === 0, hardReason: hard.map((b) => b.label).join(' and ') || null };
+}
+
+async function inspectionBlockerFor(app) {
+  const insp = await one('SELECT status, scheduled_for, recommendation FROM inspections WHERE application_id = ?', [app.id]);
+  return inspectionBlocker(app, insp);
 }
 
 export async function changeStatus(appId, user, to, remark, { override = false } = {}) {
@@ -356,10 +365,10 @@ export async function changeStatus(appId, user, to, remark, { override = false }
   if (meta.needsRemark && !remark) throw new HttpError(400, 'Add a remark explaining this step.');
   let exception = null;
   if (to === 'APPROVED') {
-    const { blocking, overridable } = approvalBlockers(decorate(row, await docsFor(appId)).compliance);
+    const { blocking, overridable, hardReason } = approvalBlockers(decorate(row, await docsFor(appId)).compliance, await inspectionBlockerFor(row));
     if (blocking.length) {
       const unmet = blocking.map((b) => b.label).join('; ');
-      if (!overridable) throw new HttpError(400, `Cannot approve: every required document must be uploaded first, even with an exception. Unmet: ${unmet}.`);
+      if (!overridable) throw new HttpError(400, `Cannot approve: ${hardReason} must be completed first, even with an exception. Unmet: ${unmet}.`);
       if (!override) throw new HttpError(400, `Cannot approve yet. Unmet: ${unmet}. Choose "Approve with exception" and give a reason to proceed.`);
       if (remark.length < MIN_EXCEPTION_REASON)
         throw new HttpError(400, `Explain the exception in at least ${MIN_EXCEPTION_REASON} characters, so reviewers understand why the norms were waived.`);
@@ -436,7 +445,7 @@ export async function getApplication(appId, user) {
     expiring: EXPIRING_DOC_TYPES.includes(t),
     doc: byType[t] || null,
   }));
-  const [history, activity, institution, officers, comments] = await Promise.all([
+  const [history, activity, institution, officers, comments, site] = await Promise.all([
     query(
       `SELECT h.*, u.name AS user_name, u.role AS user_role FROM status_history h
        LEFT JOIN profiles u ON u.id = h.user_id WHERE h.application_id = ? ORDER BY h.created_at, h.id`,
@@ -450,6 +459,7 @@ export async function getApplication(appId, user) {
     one('SELECT * FROM institutions WHERE id = ?', [app.institution_id]),
     user.role === 'ADMIN' ? officerWorkload() : Promise.resolve(undefined),
     query(COMMENTS_SQL, [appId]),
+    loadInspection(row),
   ]);
   const assignment = activity.find((a) => a.action === 'OFFICER_ASSIGNED' || a.action === 'OFFICER_REASSIGNED');
   const isOfficer = user.role === 'OFFICER' || user.role === 'ADMIN';
@@ -464,7 +474,8 @@ export async function getApplication(appId, user) {
     comments,
     assignment_reason: assignment?.details || null,
     actions: allowedActions(app, user),
-    approval: app.status === 'UNDER_REVIEW' ? { ...approvalBlockers(app.compliance), minReason: MIN_EXCEPTION_REASON } : null,
+    approval: app.status === 'UNDER_REVIEW' ? { ...approvalBlockers(app.compliance, inspectionBlocker(app, site.inspection)), minReason: MIN_EXCEPTION_REASON } : null,
+    site,
     permissions: {
       canUpload: user.role === 'COLLEGE' && (app.is_open || app.is_draft),
       canEdit: user.role === 'COLLEGE' && app.can_edit,

@@ -11,6 +11,7 @@ import { rulesInfo, saveGlobal, resetGlobal, saveYear, deleteYear, yearRulesForC
 import { listUsers, createUser, updateUser, enableLogin, setSuspended } from './users.js';
 import { mailEnabled } from './mailer.js';
 import { analytics } from './analytics.js';
+import { scheduleInspection, addPhoto, completeInspection, setCampusFromPhoto } from './inspections.js';
 import {
   HttpError, canView, listApplications, getApplication, createApplication, updateApplication, addComment, previewCompliance, uploadDocument,
   reviewDocument, changeStatus, assignOfficer, officerWorkload, dashboard,
@@ -23,7 +24,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   // Vercel caps a request body at 4.5 MB, so keep each file under 4 MB.
   limits: { fileSize: 4 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => cb(null, /\.(pdf|png|jpe?g)$/i.test(file.originalname)),
+  fileFilter: (req, file, cb) => cb(null, /\.(pdf|png|jpe?g|webp)$/i.test(file.originalname)),
 });
 
 export const router = Router();
@@ -109,6 +110,27 @@ router.get('/applications/:id', ah(async (req, res) => res.json(await getApplica
 router.patch('/applications/:id', requireRole('COLLEGE'), ah(async (req, res) => {
   await updateApplication(Number(req.params.id), req.user, req.body || {});
   res.json(await getApplication(Number(req.params.id), req.user));
+}));
+
+// ---- Site inspections ----
+router.post('/applications/:id/inspection', requireRole('OFFICER', 'ADMIN'), ah(async (req, res) => {
+  await scheduleInspection(Number(req.params.id), req.user, req.body || {});
+  res.json(await getApplication(Number(req.params.id), req.user));
+}));
+router.post('/inspections/:id/photos', requireRole('OFFICER', 'ADMIN'), upload.single('photo'), ah(async (req, res) => {
+  await addPhoto(Number(req.params.id), req.user, req.file, req.body || {});
+  const insp = await one('SELECT application_id FROM inspections WHERE id = ?', [Number(req.params.id)]);
+  res.json(await getApplication(insp.application_id, req.user));
+}));
+router.post('/inspections/:id/complete', requireRole('OFFICER', 'ADMIN'), ah(async (req, res) => {
+  await completeInspection(Number(req.params.id), req.user, req.body || {});
+  const insp = await one('SELECT application_id FROM inspections WHERE id = ?', [Number(req.params.id)]);
+  res.json(await getApplication(insp.application_id, req.user));
+}));
+router.post('/inspection-photos/:id/campus', requireRole('OFFICER', 'ADMIN'), ah(async (req, res) => {
+  await setCampusFromPhoto(Number(req.params.id), req.user);
+  const p = await one('SELECT n.application_id FROM inspection_photos p JOIN inspections n ON n.id = p.inspection_id WHERE p.id = ?', [Number(req.params.id)]);
+  res.json(await getApplication(p.application_id, req.user));
 }));
 
 router.post('/applications/:id/comments', ah(async (req, res) => {

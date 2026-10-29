@@ -6,6 +6,7 @@ import {
   CheckList, DueChip, ErrorBox, Icon, Loading, ScoreRing, StatusBadge, ROLE_LABEL, fmtDate, fmtDateTime, useLoad,
 } from '../components/ui.jsx';
 import { deficiencies, downloadDeficiencyLetter } from '../letter.js';
+import Inspection from '../components/Inspection.jsx';
 
 function LetterButton({ data }) {
   const { meta } = useAuth();
@@ -202,7 +203,7 @@ function ActionPanel({ data, onChanged }) {
     }
     if (isException) {
       if (!approval.overridable) {
-        setError('Every required document must be uploaded before approval, even with an exception.');
+        setError(`${approval.hardReason} must be completed before approval, even with an exception.`);
         return;
       }
       if (remark.trim().length < approval.minReason) {
@@ -256,7 +257,7 @@ function ActionPanel({ data, onChanged }) {
               I am approving despite these checks. My reason below will be recorded and the administrator will be alerted.
             </label>
           ) : (
-            <p className="small text-bad">Missing documents must be uploaded before this can be approved, even with an exception.</p>
+            <p className="small text-bad">{approval.hardReason} must be completed before this can be approved, even with an exception.</p>
           )}
         </div>
       )}
@@ -501,6 +502,8 @@ export default function ApplicationDetail() {
               ))}
             </ul>
           </section>
+
+          <Inspection data={data} onChanged={setData} />
 
           <section className="card">
             <h2>Application details</h2>

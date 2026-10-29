@@ -34,8 +34,15 @@ export async function signedUrl(key) {
   return data.signedUrl;
 }
 
+export async function signedUrls(keys, seconds = 3600) {
+  if (!keys.length) return {};
+  const { data, error } = await supabaseAdmin.storage.from(BUCKET).createSignedUrls(keys, seconds);
+  if (error) throw error;
+  return Object.fromEntries(data.filter((d) => d.signedUrl).map((d) => [d.path, d.signedUrl]));
+}
+
 export async function emptyBucket() {
-  for (const prefix of ['seed']) {
+  for (const prefix of ['seed', 'inspections']) {
     for (;;) {
       const { data } = await supabaseAdmin.storage.from(BUCKET).list(prefix, { limit: 1000 });
       if (!data?.length) break;
