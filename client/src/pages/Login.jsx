@@ -25,6 +25,12 @@ function SignIn({ setMode }) {
     setError('');
     const { error: err } = await supabase.auth.signInWithPassword(creds || { email: email.trim(), password });
     if (err) {
+      // Registered but never entered the code: send a fresh one and go to the code screen.
+      if (/not confirmed/i.test(err.message)) {
+        await supabase.auth.resend({ type: 'signup', email: email.trim() });
+        setMode('verify', email.trim());
+        return;
+      }
       setError(err.message === 'Invalid login credentials' ? 'Email or password is incorrect.' : err.message);
       setBusy(false);
       return;
@@ -72,11 +78,84 @@ function SignIn({ setMode }) {
   );
 }
 
+// Supabase emails a one-time code (the {{ .Token }} in the email template). Entering it signs the user in.
+function CodeForm({ email, type, title, intro, onBack, resend }) {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [cooldown, setCooldown] = useState(60);
+
+  useEffect(() => {
+    if (cooldown <= 0) return undefined;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    const { error: err } = await supabase.auth.verifyOtp({ email, token: code.trim(), type });
+    if (err) {
+      setError(/expired|invalid/i.test(err.message) ? 'That code is wrong or has expired. Check the latest email, or send a new code.' : err.message);
+      setBusy(false);
+    }
+    // On success Supabase signs the user in and the app moves on by itself.
+  };
+
+  const again = async () => {
+    setError('');
+    setInfo('');
+    const { error: err } = await resend();
+    if (err) setError(err.message);
+    else {
+      setInfo('A new code is on its way.');
+      setCooldown(60);
+    }
+  };
+
+  return (
+    <form className="card login-card" onSubmit={submit}>
+      <div>
+        <h2>{title}</h2>
+        <p className="muted small">{intro} <strong>{email}</strong>.</p>
+      </div>
+      <label className="field">
+        <span>Verification code</span>
+        <input
+          id="otp-code"
+          className="input otp-input"
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          pattern="[0-9]{6,10}"
+          maxLength={10}
+          placeholder="••••••"
+          value={code}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+          autoFocus
+          required
+        />
+      </label>
+      {error && <div className="alert alert-bad">{error}</div>}
+      {info && <div className="alert alert-ok">{info}</div>}
+      <button className="btn btn-primary btn-block" disabled={busy || code.length < 6}>{busy ? 'Checking…' : 'Verify code'}</button>
+      <p className="small muted center">
+        Didn't get it?{' '}
+        <button type="button" className="link-btn" disabled={cooldown > 0} onClick={again}>
+          {cooldown > 0 ? `Resend in ${cooldown}s` : 'Send a new code'}
+        </button>
+        {' · '}
+        <button type="button" className="link-btn" onClick={onBack}>Back to sign in</button>
+      </p>
+    </form>
+  );
+}
+
 function Register({ setMode }) {
   const [f, setF] = useState(EMPTY_REG);
   const [options, setOptions] = useState({ types: ['Engineering', 'Management', 'Pharmacy', 'Polytechnic'], regions: ['North', 'South', 'East', 'West', 'Central'] });
   const [error, setError] = useState('');
-  const [done, setDone] = useState(false);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
 
@@ -101,23 +180,13 @@ function Register({ setMode }) {
         options: { emailRedirectTo: window.location.origin, data: { signup: 'institution', ...meta } },
       });
       if (err) throw err;
-      // With email confirmation on, Supabase returns no session until the link is clicked.
-      if (!data.session) setDone(true);
+      // With email confirmation on, Supabase returns no session until the emailed code is entered.
+      if (!data.session) setMode('verify', email.trim());
     } catch (err) {
       setError(err.message);
-    } finally {
       setBusy(false);
     }
   };
-
-  if (done)
-    return (
-      <div className="card login-card">
-        <h2>Check your email</h2>
-        <p className="muted">We sent a confirmation link to <strong>{f.email}</strong>. Open it to activate your institution account, then sign in.</p>
-        <button className="btn btn-primary btn-block" onClick={() => setMode('signin')}>Back to sign in</button>
-      </div>
-    );
 
   return (
     <form className="card login-card login-card-wide" onSubmit={submit}>
@@ -176,9 +245,11 @@ function Register({ setMode }) {
   );
 }
 
+const sendResetCode = (email) =>
+  supabase.auth.resetPasswordForEmail(email, { redirectTo: `${window.location.origin}/reset-password` });
+
 function Forgot({ setMode }) {
   const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -186,30 +257,24 @@ function Forgot({ setMode }) {
     e.preventDefault();
     setBusy(true);
     setError('');
-    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${window.location.origin}/reset-password` });
+    const { error: err } = await sendResetCode(email.trim());
     setBusy(false);
     if (err) setError(err.message);
-    else setSent(true);
+    else setMode('reset-code', email.trim());
   };
 
   return (
     <form className="card login-card" onSubmit={submit}>
       <div>
         <h2>Reset password</h2>
-        <p className="muted small">Enter your account email and we'll send you a link to set a new password.</p>
+        <p className="muted small">Enter your account email and we'll send you a code to set a new password.</p>
       </div>
-      {sent ? (
-        <div className="alert alert-ok">If an account exists for {email}, a reset link is on its way. Check your inbox.</div>
-      ) : (
-        <>
-          <label className="field">
-            <span>Email</span>
-            <input id="forgot-email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </label>
-          {error && <div className="alert alert-bad">{error}</div>}
-          <button className="btn btn-primary btn-block" disabled={busy}>{busy ? 'Sending…' : 'Send reset link'}</button>
-        </>
-      )}
+      <label className="field">
+        <span>Email</span>
+        <input id="forgot-email" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+      </label>
+      {error && <div className="alert alert-bad">{error}</div>}
+      <button className="btn btn-primary btn-block" disabled={busy}>{busy ? 'Sending…' : 'Send code'}</button>
       <p className="small muted center">
         <button type="button" className="link-btn" onClick={() => setMode('signin')}>Back to sign in</button>
       </p>
@@ -218,7 +283,9 @@ function Forgot({ setMode }) {
 }
 
 export default function Login() {
-  const [mode, setMode] = useState('signin');
+  const [state, setState] = useState({ mode: 'signin', email: '' });
+  const mode = state.mode;
+  const setMode = (m, email = state.email) => setState({ mode: m, email });
 
   return (
     <div className="login">
@@ -249,6 +316,28 @@ export default function Login() {
         {mode === 'signin' && <SignIn setMode={setMode} />}
         {mode === 'register' && <Register setMode={setMode} />}
         {mode === 'forgot' && <Forgot setMode={setMode} />}
+        {mode === 'verify' && (
+          <CodeForm
+            key="verify"
+            email={state.email}
+            type="signup"
+            title="Verify your email"
+            intro="Enter the code we emailed to"
+            onBack={() => setMode('signin')}
+            resend={() => supabase.auth.resend({ type: 'signup', email: state.email })}
+          />
+        )}
+        {mode === 'reset-code' && (
+          <CodeForm
+            key="reset"
+            email={state.email}
+            type="recovery"
+            title="Enter reset code"
+            intro="If an account exists, we emailed a code to"
+            onBack={() => setMode('signin')}
+            resend={() => sendResetCode(state.email)}
+          />
+        )}
         <p className="login-note">Smart India Hackathon prototype. Sample institutions and records are fictional.</p>
       </section>
     </div>
