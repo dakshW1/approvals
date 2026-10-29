@@ -68,6 +68,54 @@ export const SLA = {
   expiryWarnDays: 30, // certificate expiring soon
 };
 
+export const DESIGNATIONS = ['Assistant Director', 'Deputy Director'];
+
+// The objects above are the defaults. Admins can override them (stored in the settings table);
+// applyRules() updates them in place so every importer sees the new values immediately.
+const clone = (o) => JSON.parse(JSON.stringify(o));
+export const currentRules = () => clone({ norms: NORMS, sla: SLA, requiredDocs: REQUIRED_DOCS, assignmentRules: ASSIGNMENT_RULES });
+export const DEFAULT_RULES = currentRules();
+
+const replace = (target, source) => {
+  for (const k of Object.keys(target)) delete target[k];
+  Object.assign(target, clone(source));
+};
+export function applyRules(r) {
+  replace(NORMS, r.norms);
+  replace(SLA, r.sla);
+  replace(REQUIRED_DOCS, r.requiredDocs);
+  replace(ASSIGNMENT_RULES, r.assignmentRules);
+}
+
+const SLA_LIMITS = { reviewDays: [1, 180], responseDays: [1, 90], reReviewDays: [1, 90], warnDays: [0, 30], pickupDays: [0, 30], expiryWarnDays: [1, 365] };
+export function validateRules(input) {
+  const errors = [];
+  const num = (v, min, max, label) => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < min || n > max) errors.push(`${label} must be between ${min} and ${max}.`);
+    return n;
+  };
+  const out = { norms: {}, sla: {}, requiredDocs: {}, assignmentRules: {} };
+  for (const type of Object.keys(DEFAULT_RULES.norms)) {
+    const n = input?.norms?.[type] || {};
+    out.norms[type] = {
+      fsr: Math.round(num(n.fsr, 1, 100, `${type} faculty ratio`)),
+      minLand: num(n.minLand, 0, 500, `${type} minimum land`),
+      sqmPerStudent: num(n.sqmPerStudent, 0, 100, `${type} built-up area per student`),
+    };
+  }
+  for (const [k, [min, max]] of Object.entries(SLA_LIMITS)) out.sla[k] = Math.round(num(input?.sla?.[k], min, max, k));
+  for (const cat of Object.keys(CATEGORIES)) {
+    const docs = [...new Set(input?.requiredDocs?.[cat] || [])].filter((d) => DOC_TYPES[d]);
+    if (!docs.length) errors.push(`${CATEGORIES[cat]} needs at least one required document.`);
+    out.requiredDocs[cat] = docs;
+    const roles = [...new Set(input?.assignmentRules?.[cat] || [])].filter((d) => DESIGNATIONS.includes(d));
+    if (!roles.length) errors.push(`${CATEGORIES[cat]} needs at least one officer role.`);
+    out.assignmentRules[cat] = roles;
+  }
+  return { rules: out, errors };
+}
+
 const DAY = 86400000;
 export const addDays = (date, n) => new Date(new Date(date).getTime() + n * DAY).toISOString();
 export const daysUntil = (date, now = new Date()) => Math.floor((new Date(date).getTime() - now.getTime()) / DAY);

@@ -152,6 +152,15 @@ export async function migrate() {
       dedupe_key TEXT UNIQUE,
       created_at TEXT NOT NULL
     );
+    ALTER TABLE profiles ADD COLUMN IF NOT EXISTS suspended INTEGER NOT NULL DEFAULT 0;
+    -- Admin-editable rules (norms, deadlines, required documents, assignment roles) as one JSON document.
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value JSONB NOT NULL,
+      updated_at TEXT NOT NULL,
+      updated_by INTEGER REFERENCES profiles(id) ON DELETE SET NULL
+    );
+    ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
     CREATE INDEX IF NOT EXISTS idx_docs_app ON documents(application_id);
     CREATE INDEX IF NOT EXISTS idx_hist_app ON status_history(application_id);
     CREATE INDEX IF NOT EXISTS idx_audit_app ON audit_log(application_id);
@@ -185,6 +194,6 @@ export async function migrate() {
 
 export async function dropAll() {
   await pool.query(`
-    DROP TABLE IF EXISTS notifications, audit_log, status_history, documents, applications, profiles, institutions CASCADE;
+    DROP TABLE IF EXISTS settings, notifications, audit_log, status_history, documents, applications, profiles, institutions CASCADE;
   `);
 }

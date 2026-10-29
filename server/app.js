@@ -7,6 +7,7 @@ import { ensureBucket } from './supabase.js';
 import { seedIfEmpty } from './seed.js';
 import { router } from './routes.js';
 import { runAlerts } from './alerts.js';
+import { ensureFreshRules } from './settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -31,7 +32,7 @@ export function scanAlerts() {
 
 const app = express();
 app.use(express.json());
-app.use('/api', (req, res, next) => init().then(() => next(), next));
+app.use('/api', (req, res, next) => init().then(() => ensureFreshRules()).then(() => next(), next));
 app.use('/api', (req, res, next) => {
   if (Date.now() - lastScan > 5 * 60 * 1000) scanAlerts();
   next();
