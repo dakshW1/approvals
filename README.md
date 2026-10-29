@@ -23,6 +23,20 @@ Requires **Node.js 22.13 or newer** (tested on Node 24) and a free Supabase proj
 3. Authentication → URL Configuration: set Site URL to `http://localhost:4000` and add `http://localhost:4000/reset-password` to Redirect URLs.
 4. Optional, for the demo: Authentication → Providers → Email → turn off "Confirm email" so new institutions can sign in straight away.
 
+### Verification codes instead of links
+
+Sign-up and password reset use a code typed into the site, so nobody has to click a link. In Supabase → Authentication → Email Templates, edit **Confirm signup** and **Reset Password** so the body shows the code:
+
+```html
+<h2>Your AICTE Approvals code</h2>
+<p>Enter this code on the website: <strong style="font-size:24px">{{ .Token }}</strong></p>
+<p>It expires in 1 hour. If you didn't ask for it, ignore this email.</p>
+```
+
+### Email notifications (optional)
+
+Add `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `EMAIL_FROM` (see `.env.example`). A Gmail App Password is the quickest free option. With them set, alerts are emailed as well as shown in the bell. Each person gets one email per batch, and sample accounts (`.demo` addresses) are never emailed. Putting the same SMTP details into Supabase → Authentication → SMTP Settings also removes Supabase's low hourly limit on code emails.
+
 ## Run it
 
 ```bash
@@ -56,11 +70,20 @@ Only these three can sign in. The other sample officers and principals exist as 
 7. **Status tracking**: Submitted → Under Review → Action Required → Approved / Rejected, with a progress stepper, enforced transitions per role, and a timeline with remarks.
 8. **Audit trail & reports**: every sign-in, submission, assignment, upload, review and status change is logged with user and time. CSV export of applications and of the audit log.
 
+### Added since
+
+- **Codes instead of links** for sign-up and password reset.
+- **Email notifications** for important alerts, sent as one email per person per batch.
+- **Deficiency letter (PDF)**, generated from the failed checks, rejected or missing documents and the officer's remarks.
+- **Rules & norms screen**: admins edit deadlines, faculty, land and built-up norms, required documents and assignment roles. Every change is audited.
+- **User management**: add officers and admins (they receive a code to set their password), edit who handles what, give a sample officer a real login, and suspend or restore any account.
+- **Phone layout**: a bottom tab bar, tables shown as cards, and full-width dialogs.
+
 ## 3-minute demo script
 
 1. **Admin** → Dashboard: 3 overdue, compliance alerts, officer workload. Open the bell to show the escalations.
 2. Open *Deccan Plateau Engineering College*: Action Required, overdue on the institution side, a rejected document, and the assignment reason.
-3. **Officers & Rules**: explain the assignment rules and norms, and pause an officer.
+3. **Rules & norms**: change the faculty ratio for Engineering and save. Open applications are re-scored immediately. Then **Users & officers**: pause an officer, or add a new one.
 4. **Sign out → Institution** → New Application: enter a program and set faculty to 10 to show the readiness check failing, fix it to 13, attach 2 documents, and submit. The app is auto-assigned to Dr. Sameer Kulkarni (West, lowest workload) rather than Rajiv Menon (West, busier).
 5. **Sign out → Officer** (`sameer.kulkarni@aicte.demo`): open it, Start review, try Approve (blocked because documents are missing), then Request action with a remark.
 6. **Institution**: see the alert, upload the missing documents, Resubmit.
