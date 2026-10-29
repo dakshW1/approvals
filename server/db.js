@@ -12,7 +12,12 @@ export const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
   max: process.env.VERCEL ? 2 : 6,
+  idleTimeoutMillis: 20_000,
+  keepAlive: true,
 });
+// Supabase's pooler drops idle connections. pg reports that on the pool; without a listener Node would
+// crash the whole server. The broken client is discarded and the next query opens a fresh one.
+pool.on('error', (err) => console.warn('Database connection dropped, will reconnect:', err.code || err.message));
 
 export const nowIso = () => new Date().toISOString();
 
