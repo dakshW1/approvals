@@ -153,6 +153,9 @@ export async function migrate() {
       created_at TEXT NOT NULL
     );
     ALTER TABLE profiles ADD COLUMN IF NOT EXISTS suspended INTEGER NOT NULL DEFAULT 0;
+    -- Drafts have not been submitted yet, so they have no submission date or deadline.
+    ALTER TABLE applications ALTER COLUMN submitted_at DROP NOT NULL;
+    ALTER TABLE applications ALTER COLUMN due_date DROP NOT NULL;
     -- Admin-editable rules (norms, deadlines, required documents, assignment roles) as one JSON document.
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,

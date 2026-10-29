@@ -23,9 +23,18 @@ const BASE_SQL = `
   LEFT JOIN profiles u ON u.id = a.assigned_officer_id`;
 
 const OPEN_LIST = OPEN_STATUSES.map((s) => `'${s}'`).join(',');
+// The institution may correct its application details until the officer starts the review,
+// and again when the officer sends it back with "Action required".
+const EDITABLE_STATUSES = ['DRAFT', 'SUBMITTED', 'ACTION_REQUIRED'];
+const NUMERIC_FIELDS = ['duration_years', 'proposed_intake', 'faculty_count', 'land_area', 'built_up_area'];
+const FIELD_LABELS = {
+  program: 'Program', academic_year: 'Academic year', category: 'Category', duration_years: 'Duration',
+  proposed_intake: 'Intake', faculty_count: 'Faculty', land_area: 'Land area', built_up_area: 'Built-up area',
+};
 
 function scope(user) {
-  if (user.role === 'ADMIN') return ['', []];
+  // Drafts are private to the institution until submitted.
+  if (user.role === 'ADMIN') return [" WHERE a.status <> 'DRAFT'", []];
   if (user.role === 'OFFICER') return [' WHERE a.assigned_officer_id = ?', [user.id]];
   return [' WHERE a.institution_id = ?', [user.institution_id]];
 }
@@ -44,8 +53,10 @@ export function decorate(row, docs, now = new Date()) {
     category_label: CATEGORIES[row.category],
     status_label: STATUSES[row.status],
     is_open: isOpen,
+    is_draft: row.status === 'DRAFT',
+    can_edit: EDITABLE_STATUSES.includes(row.status),
     days_left: isOpen ? daysUntil(row.due_date, now) : null,
-    pending_with: row.status === 'ACTION_REQUIRED' ? 'Institution' : isOpen ? 'Officer' : null,
+    pending_with: row.status === 'ACTION_REQUIRED' || row.status === 'DRAFT' ? 'Institution' : isOpen ? 'Officer' : null,
     compliance,
     docs,
   };
@@ -63,7 +74,7 @@ const docsFor = (appId) => query('SELECT * FROM documents WHERE application_id =
 
 export async function listApplications(user, filters = {}) {
   const [where, params] = scope(user);
-  const rows = await query(`${BASE_SQL}${where} ORDER BY a.submitted_at DESC`, params);
+  const rows = await query(`${BASE_SQL}${where} ORDER BY COALESCE(a.submitted_at, a.updated_at) DESC`, params);
   const docs = await docsByApp(rows.map((r) => r.id));
   let list = rows.map((r) => decorate(r, docs[r.id] || []));
   const { status, category, q, flag } = filters;
@@ -164,30 +175,36 @@ async function storeDocument(appId, docType, file, expiryDate, actorId) {
   return id;
 }
 
-function parseFields(body) {
+// A draft may be incomplete: it only needs a category and academic year. Submission needs everything.
+function parseFields(body, { draft = false } = {}) {
   const f = {
     category: String(body.category || ''),
     program: String(body.program || '').trim(),
     academic_year: String(body.academic_year || '').trim(),
-    duration_years: Number(body.duration_years),
-    proposed_intake: Number(body.proposed_intake),
-    faculty_count: Number(body.faculty_count),
-    land_area: Number(body.land_area),
-    built_up_area: Number(body.built_up_area),
   };
+  for (const k of NUMERIC_FIELDS) f[k] = body[k] === '' || body[k] === undefined || body[k] === null ? (draft ? 0 : NaN) : Number(body[k]);
   if (!CATEGORIES[f.category]) throw new HttpError(400, 'Choose an application category.');
-  if (!f.program) throw new HttpError(400, 'Enter the program or course name.');
   if (!/^\d{4}-\d{2}$/.test(f.academic_year)) throw new HttpError(400, 'Academic year must look like 2026-27.');
-  for (const k of ['duration_years', 'proposed_intake', 'faculty_count', 'land_area', 'built_up_area'])
-    if (!Number.isFinite(f[k]) || f[k] < 0) throw new HttpError(400, `Enter a valid number for ${k.replace(/_/g, ' ')}.`);
-  if (f.proposed_intake <= 0 || f.duration_years <= 0) throw new HttpError(400, 'Intake and duration must be greater than zero.');
+  if (draft) {
+    if (!f.program) f.program = 'Untitled draft';
+    for (const k of NUMERIC_FIELDS) if (!Number.isFinite(f[k]) || f[k] < 0) f[k] = 0;
+    return f;
+  }
+  validateComplete(f);
   return f;
+}
+
+function validateComplete(f) {
+  if (!f.program || f.program === 'Untitled draft') throw new HttpError(400, 'Enter the program or course name.');
+  for (const k of NUMERIC_FIELDS)
+    if (!Number.isFinite(f[k]) || f[k] < 0) throw new HttpError(400, `Enter a valid number for ${FIELD_LABELS[k].toLowerCase()}.`);
+  if (f.proposed_intake <= 0 || f.duration_years <= 0) throw new HttpError(400, 'Intake and duration must be greater than zero.');
 }
 
 export async function previewCompliance(user, body) {
   const inst = await one('SELECT * FROM institutions WHERE id = ?', [user.institution_id]);
   const app = { ...body, status: 'DRAFT' };
-  for (const k of ['duration_years', 'proposed_intake', 'faculty_count', 'land_area', 'built_up_area']) app[k] = Number(body[k]) || 0;
+  for (const k of NUMERIC_FIELDS) app[k] = Number(body[k]) || 0;
   const docs = (body.docs || []).map((t) => ({
     doc_type: t,
     status: 'PENDING',
@@ -196,8 +213,19 @@ export async function previewCompliance(user, body) {
   return evaluateCompliance(app, docs, inst?.type);
 }
 
+// Moves an application into the review queue: sets the deadline, records history and assigns an officer.
+async function submitIntoReview(appId, appNo, user, now) {
+  await query('UPDATE applications SET status = ?, submitted_at = ?, due_date = ?, updated_at = ? WHERE id = ?',
+    ['SUBMITTED', now, addDays(now, SLA.reviewDays), now, appId]);
+  await query('INSERT INTO status_history (application_id, from_status, to_status, user_id, remark, created_at) VALUES (?,?,?,?,?,?)',
+    [appId, null, 'SUBMITTED', user.id, 'Application submitted online', now]);
+  await audit(user.id, 'APPLICATION_SUBMITTED', 'application', appId, `${appNo} submitted for review`, appId);
+  await assignOfficer(appId, null);
+}
+
 export async function createApplication(user, body, files) {
-  const f = parseFields(body);
+  const asDraft = body.draft === '1' || body.draft === true;
+  const f = parseFields(body, { draft: asDraft });
   const inst = await one('SELECT * FROM institutions WHERE id = ?', [user.institution_id]);
   if (!inst) throw new HttpError(400, 'Your account is not linked to an institution.');
   for (const file of files) {
@@ -210,27 +238,53 @@ export async function createApplication(user, body, files) {
     const appNo = `AICTE-${f.academic_year}-${CATEGORY_CODES[f.category]}-${String(n).padStart(5, '0')}`;
     const appId = await insert(
       `INSERT INTO applications (app_no, institution_id, category, program, academic_year, duration_years, proposed_intake,
-        faculty_count, land_area, built_up_area, status, submitted_at, due_date, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        faculty_count, land_area, built_up_area, status, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       [appNo, inst.id, f.category, f.program, f.academic_year, f.duration_years, f.proposed_intake, f.faculty_count,
-        f.land_area, f.built_up_area, 'SUBMITTED', now, addDays(now, SLA.reviewDays), now]
+        f.land_area, f.built_up_area, 'DRAFT', now]
     );
-    await query('INSERT INTO status_history (application_id, from_status, to_status, user_id, remark, created_at) VALUES (?,?,?,?,?,?)',
-      [appId, null, 'SUBMITTED', user.id, 'Application submitted online', now]);
-    await audit(user.id, 'APPLICATION_SUBMITTED', 'application', appId, `${appNo}: ${CATEGORIES[f.category]}, ${f.program}`, appId);
+    if (asDraft) await audit(user.id, 'DRAFT_SAVED', 'application', appId, `${appNo}: ${CATEGORIES[f.category]}, ${f.program}`, appId);
     for (const file of files) await storeDocument(appId, file.fieldname.replace(/^doc_/, ''), file, body[`expiry_${file.fieldname.replace(/^doc_/, '')}`], user.id);
-    await assignOfficer(appId, null);
+    if (!asDraft) await submitIntoReview(appId, appNo, user, now);
     return appId;
   });
   await alertsForApp(id);
   return id;
 }
 
+export async function updateApplication(appId, user, body) {
+  const row = await one('SELECT * FROM applications WHERE id = ?', [appId]);
+  if (!row || !canView(row, user) || user.role !== 'COLLEGE') throw new HttpError(404, 'Application not found.');
+  if (!EDITABLE_STATUSES.includes(row.status))
+    throw new HttpError(400, 'This application can no longer be edited because the officer is reviewing it.');
+  const isDraft = row.status === 'DRAFT';
+  const next = parseFields({ ...row, ...body, category: isDraft ? body.category ?? row.category : row.category }, { draft: isDraft });
+  if (!isDraft && body.category && body.category !== row.category) throw new HttpError(400, 'The category cannot change after submission.');
+  const changed = Object.keys(FIELD_LABELS).filter((k) => String(next[k]) !== String(row[k]));
+  if (!changed.length) return;
+  await query(
+    `UPDATE applications SET ${changed.map((k) => `${k} = ?`).join(', ')}, updated_at = ? WHERE id = ?`,
+    [...changed.map((k) => next[k]), nowIso(), appId]
+  );
+  const summary = changed.map((k) => `${FIELD_LABELS[k]} ${row[k]} -> ${next[k]}`).join('; ');
+  await audit(user.id, isDraft ? 'DRAFT_UPDATED' : 'APPLICATION_EDITED', 'application', appId, summary, appId);
+  if (!isDraft) {
+    await notify(row.assigned_officer_id, appId, 'APPLICATION_EDITED', 'info', `${row.app_no}: institution updated ${summary}.`);
+    await alertsForApp(appId);
+  }
+}
+
+async function submitDraft(row, user) {
+  validateComplete(row);
+  await tx(() => submitIntoReview(row.id, row.app_no, user, nowIso()));
+  await alertsForApp(row.id);
+}
+
 export async function uploadDocument(appId, user, docType, file, expiryDate) {
   const app = await one('SELECT * FROM applications WHERE id = ?', [appId]);
   if (!app || !canView(app, user)) throw new HttpError(404, 'Application not found.');
   if (!file) throw new HttpError(400, 'Choose a PDF, JPG or PNG file under 4 MB.');
-  if (!OPEN_STATUSES.includes(app.status) && !EXPIRING_DOC_TYPES.includes(docType))
+  if (!EDITABLE_STATUSES.includes(app.status) && !OPEN_STATUSES.includes(app.status) && !EXPIRING_DOC_TYPES.includes(docType))
     throw new HttpError(400, 'This application is closed. Only renewed certificates can be uploaded.');
   await tx(async () => {
     await storeDocument(appId, docType, file, expiryDate, user.id);
@@ -260,11 +314,13 @@ export async function reviewDocument(docId, user, decision, remark) {
 }
 
 const TRANSITIONS = {
+  DRAFT: { SUBMITTED: ['COLLEGE'] },
   SUBMITTED: { UNDER_REVIEW: ['OFFICER', 'ADMIN'] },
   UNDER_REVIEW: { ACTION_REQUIRED: ['OFFICER', 'ADMIN'], APPROVED: ['OFFICER', 'ADMIN'], REJECTED: ['OFFICER', 'ADMIN'] },
   ACTION_REQUIRED: { UNDER_REVIEW: ['COLLEGE'] },
 };
 const ACTION_LABELS = {
+  'DRAFT>SUBMITTED': { label: 'Submit application', variant: 'primary' },
   'SUBMITTED>UNDER_REVIEW': { label: 'Start review', variant: 'primary' },
   'UNDER_REVIEW>ACTION_REQUIRED': { label: 'Request action from institution', variant: 'warn', needsRemark: true },
   'UNDER_REVIEW>APPROVED': { label: 'Approve', variant: 'ok' },
@@ -285,6 +341,7 @@ export async function changeStatus(appId, user, to, remark) {
   const allowed = TRANSITIONS[row.status]?.[to];
   if (!allowed || !allowed.includes(user.role))
     throw new HttpError(400, `Cannot move from ${STATUSES[row.status]} to ${STATUSES[to] || to}.`);
+  if (row.status === 'DRAFT') return submitDraft(row, user);
   const meta = ACTION_LABELS[`${row.status}>${to}`];
   remark = String(remark || '').trim();
   if (meta.needsRemark && !remark) throw new HttpError(400, 'Add a remark explaining this step.');
@@ -359,7 +416,8 @@ export async function getApplication(appId, user) {
     assignment_reason: assignment?.details || null,
     actions: allowedActions(app, user),
     permissions: {
-      canUpload: user.role === 'COLLEGE' && app.is_open,
+      canUpload: user.role === 'COLLEGE' && (app.is_open || app.is_draft),
+      canEdit: user.role === 'COLLEGE' && app.can_edit,
       canRenew: user.role === 'COLLEGE' && !app.is_open,
       canVerify: isOfficer && app.status === 'UNDER_REVIEW',
       canReassign: user.role === 'ADMIN' && app.is_open,
@@ -369,7 +427,8 @@ export async function getApplication(appId, user) {
 }
 
 export async function dashboard(user) {
-  const apps = await listApplications(user);
+  const all = await listApplications(user);
+  const apps = all.filter((a) => !a.is_draft);
   const count = (fn) => apps.filter(fn).length;
   const open = apps.filter((a) => a.is_open);
   const totals = {
@@ -385,6 +444,7 @@ export async function dashboard(user) {
     avg_score: apps.length ? Math.round(apps.reduce((s, a) => s + a.compliance.score, 0) / apps.length) : 0,
   };
   totals.pending = totals.submitted + totals.under_review;
+  totals.drafts = all.length - apps.length;
   const byCategory = Object.entries(CATEGORIES).map(([key, label]) => ({
     key, label, count: count((a) => a.category === key), open: open.filter((a) => a.category === key).length,
   }));

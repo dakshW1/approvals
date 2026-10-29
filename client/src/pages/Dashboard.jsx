@@ -135,6 +135,12 @@ export default function Dashboard() {
         )}
       </div>
 
+      {t.drafts > 0 && (
+        <Link to="/applications?status=DRAFT" className="alert alert-warn draft-note">
+          You have {t.drafts} unsubmitted draft{t.drafts > 1 ? 's' : ''}. Finish and submit {t.drafts > 1 ? 'them' : 'it'} so the review can start →
+        </Link>
+      )}
+
       <div className="hero-grid">
         <HeroCard t={t} role={user.role} />
         <div className="tiles">

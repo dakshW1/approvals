@@ -3,6 +3,7 @@
 // from the current AICTE Approval Process Handbook.
 
 export const STATUSES = {
+  DRAFT: 'Draft',
   SUBMITTED: 'Submitted',
   UNDER_REVIEW: 'Under Review',
   ACTION_REQUIRED: 'Action Required',

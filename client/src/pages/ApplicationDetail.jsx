@@ -39,6 +39,7 @@ function Stepper({ app, history }) {
   const reached = new Set(history.map((h) => h.to_status));
   const final = app.status === 'APPROVED' || app.status === 'REJECTED';
   const steps = [
+    ...(app.status === 'DRAFT' ? [{ key: 'DRAFT', label: 'Draft' }] : []),
     { key: 'SUBMITTED', label: 'Submitted' },
     { key: 'UNDER_REVIEW', label: 'Under Review' },
     ...(hadAction || app.status === 'ACTION_REQUIRED' ? [{ key: 'ACTION_REQUIRED', label: 'Action Required' }] : []),
@@ -207,7 +208,9 @@ function ActionPanel({ data, onChanged }) {
   };
 
   const hint =
-    app.status === 'SUBMITTED'
+    app.status === 'DRAFT'
+      ? 'This draft is visible only to your institution. Submit it when the details are complete; missing documents can still be added later.'
+      : app.status === 'SUBMITTED'
       ? 'Start the review to verify documents and record a decision.'
       : app.status === 'ACTION_REQUIRED'
         ? 'Fix the issues listed by the officer, upload any missing documents, then resubmit.'
@@ -297,10 +300,21 @@ export default function ApplicationDetail() {
           <StatusBadge status={app.status} />
           <DueChip app={app} />
           {app.pending_with && <span className="muted small">Pending with {app.pending_with.toLowerCase()}</span>}
-          <LetterButton data={data} />
+          <div className="head-actions">
+            {permissions.canEdit && (
+              <Link to={`/applications/${app.id}/edit`} className="btn btn-sm btn-ghost">Edit details</Link>
+            )}
+            {!app.is_draft && <LetterButton data={data} />}
+          </div>
         </div>
         <Stepper app={app} history={history} />
       </div>
+
+      {app.is_draft && (
+        <div className="alert alert-warn">
+          <strong>Draft, not yet submitted.</strong> Only your institution can see it. Fill in the remaining details, then choose "Submit application".
+        </div>
+      )}
 
       {user.role === 'COLLEGE' && app.status === 'ACTION_REQUIRED' && (
         <div className="alert alert-warn">

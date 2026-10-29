@@ -113,6 +113,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/applications" element={<Applications />} />
           {user.role === 'COLLEGE' && <Route path="/applications/new" element={<NewApplication />} />}
+          {user.role === 'COLLEGE' && <Route path="/applications/:id/edit" element={<NewApplication />} />}
           <Route path="/applications/:id" element={<ApplicationDetail />} />
           {user.role === 'ADMIN' && <Route path="/users" element={<Users />} />}
           {user.role === 'ADMIN' && <Route path="/rules" element={<Rules />} />}

@@ -69,6 +69,7 @@ export function Icon({ name, size = 20, stroke = 1.9 }) {
 }
 
 export const STATUS_META = {
+  DRAFT: { label: 'Draft', tone: 'draft' },
   SUBMITTED: { label: 'Submitted', tone: 'neutral' },
   UNDER_REVIEW: { label: 'Under Review', tone: 'info' },
   ACTION_REQUIRED: { label: 'Action Required', tone: 'warn' },
@@ -99,6 +100,7 @@ export function StatusBadge({ status }) {
 }
 
 export function DueChip({ app }) {
+  if (app.is_draft) return <span className="muted">Not submitted</span>;
   if (!app.is_open) return <span className="muted">Closed</span>;
   const d = app.days_left;
   if (d < 0) return <span className="chip chip-bad">Overdue {-d}d</span>;
