@@ -8,6 +8,7 @@ import {
 } from './rules.js';
 import { audit, notify, insertNotifications, alertsForApp, collegeUserIds, adminUserIds } from './alerts.js';
 import { inspectionBlocker, loadInspection } from './inspections.js';
+import { checkDocument } from './docCheck.js';
 
 export class HttpError extends Error {
   constructor(status, message) {
@@ -169,11 +170,17 @@ async function storeDocument(appId, docType, file, expiryDate, actorId) {
     await removeFile(old.stored_name).catch(() => {});
   }
   const expiry = expiryDate ? new Date(`${expiryDate}T23:59:59`).toISOString() : null;
+  // Read the document and compare it with the application before an officer looks at it.
+  const inst = await one('SELECT i.name FROM applications a JOIN institutions i ON i.id = a.institution_id WHERE a.id = ?', [appId]);
+  const check = await checkDocument({
+    buffer: file.buffer, mimetype: file.mimetype, filename: file.originalname, docType, institution: inst.name, declaredExpiry: expiry,
+  }).catch(() => null);
   const id = await insert(
-    'INSERT INTO documents (application_id, doc_type, original_name, stored_name, size, uploaded_at, expiry_date, status) VALUES (?,?,?,?,?,?,?,?)',
-    [appId, docType, file.originalname, key, file.size, nowIso(), expiry, 'PENDING']
+    'INSERT INTO documents (application_id, doc_type, original_name, stored_name, size, uploaded_at, expiry_date, status, auto_check) VALUES (?,?,?,?,?,?,?,?,?::jsonb)',
+    [appId, docType, file.originalname, key, file.size, nowIso(), expiry, 'PENDING', check ? JSON.stringify(check) : null]
   );
-  await audit(actorId, old ? 'DOCUMENT_REPLACED' : 'DOCUMENT_UPLOADED', 'document', id, `${DOC_TYPES[docType]}: ${file.originalname}`, appId);
+  const summary = check ? ` (automatic check: ${check.status})` : '';
+  await audit(actorId, old ? 'DOCUMENT_REPLACED' : 'DOCUMENT_UPLOADED', 'document', id, `${DOC_TYPES[docType]}: ${file.originalname}${summary}`, appId);
   return id;
 }
 

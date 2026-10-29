@@ -19,7 +19,8 @@
     "jspdf": "^2.5.2",
     "multer": "^2.0.2",
     "nodemailer": "^6.10.1",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "unpdf": "^0.12.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.4.1",

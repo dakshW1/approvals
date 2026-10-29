@@ -6,6 +6,7 @@ import { supabaseAdmin, ensureBucket, emptyBucket, putFile } from './supabase.js
 import { DOC_TYPES, REQUIRED_DOCS, EXPIRING_DOC_TYPES, CATEGORIES, CATEGORY_CODES, ASSIGNMENT_RULES, SLA, STATUSES, addDays } from './rules.js';
 import { runAlerts } from './alerts.js';
 import { seedInspections } from './seedInspections.js';
+import { backfillDocChecks, seedDemoThreads } from './seedDemoExtras.js';
 import { backfillCampusLocations } from './db.js';
 
 const DAY = 86400000;
@@ -247,6 +248,8 @@ export async function seed() {
     await Promise.all(files.slice(i, i + 10).map(([key, pdf]) => putFile(key, pdf, 'application/pdf')));
   await backfillCampusLocations();
   await seedInspections();
+  await backfillDocChecks();
+  await seedDemoThreads();
   await runAlerts();
 }
 

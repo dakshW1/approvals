@@ -176,6 +176,8 @@ export async function migrate() {
       updated_by INTEGER REFERENCES profiles(id) ON DELETE SET NULL
     );
     ALTER TABLE rule_versions ENABLE ROW LEVEL SECURITY;
+    -- Result of the automated document check (text read from the PDF compared with the application).
+    ALTER TABLE documents ADD COLUMN IF NOT EXISTS auto_check JSONB;
     -- Site inspections by the expert committee, with geo-tagged photos checked against the campus location.
     ALTER TABLE institutions ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION;
     ALTER TABLE institutions ADD COLUMN IF NOT EXISTS lng DOUBLE PRECISION;

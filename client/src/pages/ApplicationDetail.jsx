@@ -63,6 +63,42 @@ function Stepper({ app, history }) {
   );
 }
 
+const CHECK_STATUS = {
+  pass: { tone: 'ok', label: 'Automatic check passed' },
+  warn: { tone: 'warn', label: 'Automatic check: please review' },
+  fail: { tone: 'bad', label: 'Automatic check found a problem' },
+  unreadable: { tone: 'warn', label: 'Automatic check: could not read text' },
+  skipped: { tone: 'neutral', label: 'Not checked automatically' },
+};
+const LEVEL_ICON = { ok: '✓', warn: '!', fail: '✕', info: 'i' };
+
+// What the system read from the document, shown to help (not replace) the officer's verification.
+function AutoCheck({ check }) {
+  const [open, setOpen] = useState(check.status === 'fail');
+  const s = CHECK_STATUS[check.status] || CHECK_STATUS.skipped;
+  const notes = check.findings.filter((f) => f.level !== 'ok').length;
+  return (
+    <div className={`autocheck autocheck-${s.tone}`}>
+      <button type="button" className="autocheck-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="autocheck-dot" aria-hidden="true" />
+        {s.label}
+        {notes > 0 && check.status !== 'fail' && <span className="muted"> · {notes} note{notes > 1 ? 's' : ''}</span>}
+        <span className="autocheck-toggle">{open ? 'Hide' : 'Details'}</span>
+      </button>
+      {open && (
+        <ul className="autocheck-list">
+          {check.findings.map((f, i) => (
+            <li key={i} className={`af af-${f.level}`}>
+              <span className="af-icon" aria-hidden="true">{LEVEL_ICON[f.level]}</span>
+              {f.text}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function DocumentRow({ item, perms, onChanged, appId }) {
   const [expiry, setExpiry] = useState('');
   const [rejecting, setRejecting] = useState(false);
@@ -129,6 +165,7 @@ function DocumentRow({ item, perms, onChanged, appId }) {
           <div className="doc-meta text-bad">Not uploaded</div>
         )}
         {d?.remark && <div className="doc-remark">Officer remark: {d.remark}</div>}
+        {d?.auto_check && <AutoCheck check={d.auto_check} />}
         {error && <div className="doc-error">{error}</div>}
       </div>
       <div className="doc-side">
