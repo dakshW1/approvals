@@ -16,7 +16,9 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.118.0",
     "express": "^4.21.2",
+    "jspdf": "^2.5.2",
     "multer": "^2.0.2",
+    "nodemailer": "^6.10.1",
     "pg": "^8.23.1"
   },
   "devDependencies": {

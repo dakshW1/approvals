@@ -1,5 +1,36 @@
 import { query, nowIso } from './db.js';
 import { OPEN_STATUSES, SLA, DOC_TYPES, evaluateCompliance, daysUntil } from './rules.js';
+import { mailEnabled, deliverable, sendMail, layout, appUrl } from './mailer.js';
+
+// Alert types that are also emailed. Routine updates (an upload, review not started) stay in-app only.
+const EMAIL_TYPES = new Set([
+  'OVERDUE', 'ESCALATION', 'DEADLINE', 'MISSING_DOCS', 'CERT_EXPIRED', 'CERT_EXPIRING', 'ASSIGNED', 'ASSIGNMENT_FAILED',
+  'DOCUMENT_REJECTED', 'RESUBMITTED', 'STATUS_UNDER_REVIEW', 'STATUS_ACTION_REQUIRED', 'STATUS_APPROVED', 'STATUS_REJECTED',
+]);
+
+// One email per person per batch, listing every new alert for them.
+async function emailNotifications(rows) {
+  const wanted = rows.filter((r) => EMAIL_TYPES.has(r.type));
+  if (!mailEnabled || !wanted.length) return;
+  const users = await query('SELECT id, name, email FROM profiles WHERE id = ANY(?::int[]) AND suspended = 0', [[...new Set(wanted.map((r) => r.user_id))]]);
+  const base = appUrl();
+  await Promise.allSettled(
+    users
+      .filter((u) => deliverable(u.email))
+      .map((u) => {
+        const mine = wanted.filter((r) => r.user_id === u.id);
+        const critical = mine.some((r) => r.severity === 'critical');
+        const subject = mine.length === 1 ? mine[0].message.slice(0, 110) : `${mine.length} new alerts${critical ? ' (action needed)' : ''}`;
+        const items = mine.map((r) => ({ ...r, link: r.application_id ? `${base}/applications/${r.application_id}` : null }));
+        return sendMail({
+          to: u.email,
+          subject: `AICTE Approvals: ${subject}`,
+          html: layout({ heading: mine.length === 1 ? 'New alert' : `${mine.length} new alerts`, intro: `Hello ${u.name},`, items, cta: { href: base, label: 'Open the portal' } }),
+          text: `${mine.map((r) => `- ${r.message}`).join('\n')}\n\n${base}`,
+        });
+      })
+  );
+}
 
 export async function audit(userId, action, entity, entityId, details = '', applicationId = null, at = nowIso()) {
   await query(
@@ -19,6 +50,7 @@ export async function insertNotifications(rows) {
     return true;
   });
   const now = nowIso();
+  const created = [];
   for (let i = 0; i < valid.length; i += 400) {
     const chunk = valid.slice(i, i + 400);
     const params = [];
@@ -26,12 +58,17 @@ export async function insertNotifications(rows) {
       params.push(r[0], r[1] ?? null, r[2], r[3], r[4], r[5] ?? null, now);
       return '(?,?,?,?,?,?,?)';
     });
-    await query(
-      `INSERT INTO notifications (user_id, application_id, type, severity, message, dedupe_key, created_at)
-       VALUES ${values.join(', ')} ON CONFLICT (dedupe_key) DO NOTHING`,
-      params
+    created.push(
+      ...(await query(
+        `INSERT INTO notifications (user_id, application_id, type, severity, message, dedupe_key, created_at)
+         VALUES ${values.join(', ')} ON CONFLICT (dedupe_key) DO NOTHING
+         RETURNING user_id, application_id, type, severity, message`,
+        params
+      ))
     );
   }
+  // Only alerts that are actually new (not deduplicated) are emailed.
+  await emailNotifications(created).catch((err) => console.warn('Alert emails failed:', err.message));
 }
 
 export const notify = (userId, applicationId, type, severity, message, dedupeKey = null) =>
