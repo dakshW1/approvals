@@ -2,3 +2,6 @@ node_modules/
 dist/
 data/
 .env
+demo-documents/*.pdf
+demo-documents/correct/
+demo-documents/faulty/
