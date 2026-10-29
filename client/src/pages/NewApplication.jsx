@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../App.jsx';
 import { api } from '../api.js';
 import { CheckList, ErrorBox, Loading, ScoreRing } from '../components/ui.jsx';
+import { rulesFor } from '../rules.js';
 
 const DEFAULTS = {
   category: 'NEW_COURSE',
@@ -30,8 +31,10 @@ export default function NewApplication() {
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState(null);
   const [busy, setBusy] = useState(null);
-  const required = meta.REQUIRED_DOCS[form.category];
-  const norm = meta.NORMS[user.institution?.type] || meta.NORMS.Engineering;
+  // Norms and required documents follow the academic year being applied for.
+  const yearRules = useMemo(() => rulesFor(meta, form.academic_year), [meta, form.academic_year]);
+  const required = useMemo(() => yearRules.requiredDocs[form.category] || [], [yearRules, form.category]);
+  const norm = yearRules.norms[user.institution?.type] || yearRules.norms.Engineering;
   const isDraft = !editing || existing?.app.status === 'DRAFT';
 
   useEffect(() => {
@@ -159,7 +162,7 @@ export default function NewApplication() {
           <section className="card">
             <h2>2. Infrastructure & faculty</h2>
             <p className="muted small">
-              Norms for {user.institution.type}: faculty-student ratio 1:{norm.fsr}, minimum land {norm.minLand} acres, {norm.sqmPerStudent} sq.m built-up per student.
+              Norms for {user.institution.type}, AY {form.academic_year || '…'}: faculty-student ratio 1:{norm.fsr}, minimum land {norm.minLand} acres, {norm.sqmPerStudent} sq.m built-up per student.
             </p>
             <div className="form-grid">
               <label className="field">

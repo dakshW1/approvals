@@ -167,6 +167,15 @@ export async function migrate() {
       updated_by INTEGER REFERENCES profiles(id) ON DELETE SET NULL
     );
     ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+    -- Norms and required documents for one academic year (versioned rules).
+    CREATE TABLE IF NOT EXISTS rule_versions (
+      academic_year TEXT PRIMARY KEY,
+      norms JSONB NOT NULL,
+      required_docs JSONB NOT NULL,
+      updated_at TEXT NOT NULL,
+      updated_by INTEGER REFERENCES profiles(id) ON DELETE SET NULL
+    );
+    ALTER TABLE rule_versions ENABLE ROW LEVEL SECURITY;
     -- Conversation between the institution and AICTE staff on one application.
     CREATE TABLE IF NOT EXISTS comments (
       id SERIAL PRIMARY KEY,
@@ -210,6 +219,6 @@ export async function migrate() {
 
 export async function dropAll() {
   await pool.query(`
-    DROP TABLE IF EXISTS comments, settings, notifications, audit_log, status_history, documents, applications, profiles, institutions CASCADE;
+    DROP TABLE IF EXISTS rule_versions, comments, settings, notifications, audit_log, status_history, documents, applications, profiles, institutions CASCADE;
   `);
 }

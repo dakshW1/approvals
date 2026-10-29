@@ -7,7 +7,7 @@ import {
   STATUSES, CATEGORIES, DOC_TYPES, REQUIRED_DOCS, EXPIRING_DOC_TYPES, NORMS, SLA, ASSIGNMENT_RULES, DESIGNATIONS,
 } from './rules.js';
 import { audit } from './alerts.js';
-import { rulesInfo, saveRules, resetRules } from './settings.js';
+import { rulesInfo, saveGlobal, resetGlobal, saveYear, deleteYear, yearRulesForClient } from './settings.js';
 import { listUsers, createUser, updateUser, enableLogin, setSuspended } from './users.js';
 import { mailEnabled } from './mailer.js';
 import {
@@ -44,17 +44,25 @@ router.post('/auth/signed-in', ah(async (req, res) => {
 }));
 
 router.get('/meta', (req, res) =>
-  res.json({ STATUSES, CATEGORIES, DOC_TYPES, REQUIRED_DOCS, EXPIRING_DOC_TYPES, NORMS, SLA, ASSIGNMENT_RULES, DESIGNATIONS, EMAIL_ENABLED: mailEnabled })
+  res.json({ STATUSES, CATEGORIES, DOC_TYPES, REQUIRED_DOCS, EXPIRING_DOC_TYPES, NORMS, SLA, ASSIGNMENT_RULES, DESIGNATIONS, EMAIL_ENABLED: mailEnabled, YEAR_RULES: yearRulesForClient() })
 );
 
 // ---- Rules & norms (admin) ----
 router.get('/rules', requireRole('ADMIN'), ah(async (req, res) => res.json(await rulesInfo())));
-router.put('/rules', requireRole('ADMIN'), ah(async (req, res) => {
-  await saveRules(req.body, req.user.id);
+router.put('/rules/global', requireRole('ADMIN'), ah(async (req, res) => {
+  await saveGlobal(req.body, req.user.id);
   res.json(await rulesInfo());
 }));
-router.post('/rules/reset', requireRole('ADMIN'), ah(async (req, res) => {
-  await resetRules(req.user.id);
+router.post('/rules/global/reset', requireRole('ADMIN'), ah(async (req, res) => {
+  await resetGlobal(req.user.id);
+  res.json(await rulesInfo());
+}));
+router.put('/rules/years/:ay', requireRole('ADMIN'), ah(async (req, res) => {
+  await saveYear(req.params.ay, req.body, req.user.id);
+  res.json(await rulesInfo());
+}));
+router.delete('/rules/years/:ay', requireRole('ADMIN'), ah(async (req, res) => {
+  await deleteYear(req.params.ay, req.user.id);
   res.json(await rulesInfo());
 }));
 

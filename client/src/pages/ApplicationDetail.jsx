@@ -466,7 +466,10 @@ export default function ApplicationDetail() {
           <section className="card">
             <div className="card-head">
               <h2>Compliance check</h2>
-              <span className="muted small">{c.passed} passed · {c.warned} warnings · {c.failed} failed</span>
+              <span className="muted small">
+                {c.passed} passed · {c.warned} warnings · {c.failed} failed · AY {app.academic_year} rules
+                {data.rules_source !== app.academic_year && <> (from {data.rules_source === 'default' ? 'defaults' : `AY ${data.rules_source}`})</>}
+              </span>
             </div>
             <div className="compliance">
               <ScoreRing score={c.score} />

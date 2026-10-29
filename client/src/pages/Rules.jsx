@@ -16,37 +16,49 @@ const NORM_FIELDS = [
   ['minLand', 'Min. land', 'acres'],
   ['sqmPerStudent', 'Built-up / student', 'sq.m'],
 ];
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const sourceLabel = (s) => (s === 'default' ? 'built-in defaults' : `AY ${s}`);
 
-export default function Rules() {
-  const { meta, reloadMeta } = useAuth();
-  const { data, error, loading, setData } = useLoad(() => api('/rules'), []);
+function SaveBar({ dirty, busy, msg, children }) {
+  return (
+    <div className={`save-bar ${dirty ? 'is-dirty' : ''}`} role="status">
+      <span className="save-msg">
+        {msg ? <span className={msg.tone === 'ok' ? 'text-ok' : 'text-bad'}>{msg.text}</span> : dirty ? 'You have unsaved changes.' : 'All changes saved.'}
+      </span>
+      <div className="head-actions">{children(busy)}</div>
+    </div>
+  );
+}
+
+function YearRules({ info, setInfo, reloadMeta }) {
+  const { meta } = useAuth();
+  const thisYear = info.years.find((y) => y.applications > 0 && y.own)?.academic_year || info.years[info.years.length - 2]?.academic_year;
+  const [ay, setAy] = useState(thisYear || info.years[0].academic_year);
+  const year = info.years.find((y) => y.academic_year === ay) || info.years[0];
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [newYear, setNewYear] = useState('');
 
   useEffect(() => {
-    if (data) setDraft(structuredClone(data.rules));
-  }, [data]);
+    setDraft({ norms: structuredClone(year.norms), requiredDocs: structuredClone(year.requiredDocs) });
+    setMsg(null);
+  }, [ay, info]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dirty = useMemo(() => data && draft && JSON.stringify(draft) !== JSON.stringify(data.rules), [data, draft]);
-  if (loading && !data) return <Loading />;
-  if (error) return <ErrorBox error={error} />;
-  if (!draft) return <Loading />;
-
-  const setSla = (k, v) => setDraft((d) => ({ ...d, sla: { ...d.sla, [k]: v } }));
+  const dirty = useMemo(() => draft && !same(draft, { norms: year.norms, requiredDocs: year.requiredDocs }), [draft, year]);
+  if (!draft) return null;
+  const cats = Object.entries(meta.CATEGORIES);
   const setNorm = (type, k, v) => setDraft((d) => ({ ...d, norms: { ...d.norms, [type]: { ...d.norms[type], [k]: v } } }));
-  const toggle = (group, cat, value) =>
+  const toggleDoc = (cat, doc) =>
     setDraft((d) => {
-      const list = d[group][cat];
-      const next = list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
-      return { ...d, [group]: { ...d[group], [cat]: next } };
+      const list = d.requiredDocs[cat];
+      return { ...d, requiredDocs: { ...d.requiredDocs, [cat]: list.includes(doc) ? list.filter((x) => x !== doc) : [...list, doc] } };
     });
-
   const run = async (fn, ok) => {
     setBusy(true);
     setMsg(null);
     try {
-      setData(await fn());
+      setInfo(await fn());
       await reloadMeta();
       setMsg({ tone: 'ok', text: ok });
     } catch (e) {
@@ -55,85 +67,78 @@ export default function Rules() {
       setBusy(false);
     }
   };
-  const save = () => run(() => api('/rules', { method: 'PUT', body: draft }), 'Rules saved. They apply to every open application from now on.');
-  const reset = () => run(() => api('/rules/reset', { method: 'POST' }), 'Rules reset to the built-in defaults.');
-  const isDefault = JSON.stringify(data.rules) === JSON.stringify(data.defaults);
-  const cats = Object.entries(meta.CATEGORIES);
+  const addYear = () => {
+    if (!/^\d{4}-\d{2}$/.test(newYear)) return setMsg({ tone: 'bad', text: 'Enter a year like 2028-29.' });
+    if (!info.years.some((y) => y.academic_year === newYear)) setInfo({ ...info, years: [...info.years, { ...year, academic_year: newYear, own: false, applications: 0, updated_at: null }].sort((a, b) => a.academic_year.localeCompare(b.academic_year)) });
+    setAy(newYear);
+    setNewYear('');
+  };
 
   return (
-    <div className="page">
-      <div className="page-head">
-        <div>
-          <h1>Rules & norms</h1>
-          <p className="sub">
-            The norms, deadlines and document lists the system checks every application against. Changes take effect immediately and are recorded in the audit trail.
-          </p>
-        </div>
-        <div className="muted small">
-          {data.updated_at ? <>Last changed {fmtDateTime(data.updated_at)} by {data.updated_by || 'an administrator'}</> : 'Using built-in defaults'}
-        </div>
-      </div>
-
-      <div className="rules-top">
-        <section className="card">
-          <h2>Deadlines</h2>
-          <div className="rule-fields">
-            {SLA_FIELDS.map(([k, label, unit]) => (
-              <label key={k} className="rule-field">
-                <span>
-                  <span className="rule-label">{label}</span>
-                  <span className="rule-unit">{unit}</span>
-                </span>
-                <input id={`sla-${k}`} className="input input-num" type="number" min="0" value={draft.sla[k]} onChange={(e) => setSla(k, e.target.value)} />
-              </label>
-            ))}
-          </div>
-        </section>
-
-        <section className="card">
-          <h2>Infrastructure & faculty norms</h2>
-          <div className="table-wrap">
-            <table className="table table-compact table-cards">
-              <thead>
-                <tr>
-                  <th>Institution type</th>
-                  {NORM_FIELDS.map(([k, label]) => <th key={k}>{label}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {Object.keys(draft.norms).map((type) => (
-                  <tr key={type}>
-                    <td data-label="Type"><strong>{type}</strong></td>
-                    {NORM_FIELDS.map(([k, label, unit]) => (
-                      <td key={k} data-label={label}>
-                        <span className="rule-input">
-                          {unit === '1:' && <span className="muted small">1:</span>}
-                          <input
-                            id={`norm-${type}-${k}`}
-                            className="input input-num"
-                            type="number"
-                            min="0"
-                            step={k === 'fsr' ? 1 : 0.1}
-                            value={draft.norms[type][k]}
-                            onChange={(e) => setNorm(type, k, e.target.value)}
-                          />
-                          {unit !== '1:' && <span className="muted small">{unit}</span>}
-                        </span>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-
+    <>
       <section className="card">
         <div className="card-head">
-          <h2>Required documents</h2>
-          <span className="muted small">Tick the documents each application category must upload.</span>
+          <h2>Norms & documents by academic year</h2>
+          <span className="muted small">Each application is checked against the rules for its own academic year.</span>
         </div>
+        <div className="year-picker" role="tablist" aria-label="Academic year">
+          {info.years.map((y) => (
+            <button key={y.academic_year} role="tab" aria-selected={y.academic_year === ay} className={`year-chip ${y.academic_year === ay ? 'active' : ''}`} onClick={() => setAy(y.academic_year)}>
+              <span className="year-chip-ay">AY {y.academic_year}</span>
+              <span className="year-chip-sub">{y.own ? 'Own rules' : `Uses ${sourceLabel(y.source)}`}{y.applications ? ` · ${y.applications} apps` : ''}</span>
+            </button>
+          ))}
+          <span className="year-add">
+            <input id="new-year" className="input input-sm" placeholder="2028-29" value={newYear} onChange={(e) => setNewYear(e.target.value)} aria-label="Add academic year" />
+            <button className="btn btn-sm btn-ghost" onClick={addYear}>Add year</button>
+          </span>
+        </div>
+        <p className="year-note">
+          {year.own ? (
+            <>AY {ay} has its own rules{year.updated_at && <>, last changed {fmtDateTime(year.updated_at)}{year.updated_by ? ` by ${year.updated_by}` : ''}</>}.</>
+          ) : (
+            <>AY {ay} currently uses the {sourceLabel(year.source)}. Saving creates rules for AY {ay} only; other years stay as they are.</>
+          )}{' '}
+          {year.applications > 0 ? `${year.applications} application(s) for this year are checked against these rules.` : 'No applications for this year yet.'}
+        </p>
+
+        <h3 className="mini-head">Infrastructure & faculty norms</h3>
+        <div className="table-wrap">
+          <table className="table table-compact table-cards">
+            <thead>
+              <tr>
+                <th>Institution type</th>
+                {NORM_FIELDS.map(([k, label]) => <th key={k}>{label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {Object.keys(draft.norms).map((type) => (
+                <tr key={type}>
+                  <td data-label="Type"><strong>{type}</strong></td>
+                  {NORM_FIELDS.map(([k, label, unit]) => (
+                    <td key={k} data-label={label}>
+                      <span className="rule-input">
+                        {unit === '1:' && <span className="muted small">1:</span>}
+                        <input
+                          id={`norm-${type}-${k}`}
+                          className="input input-num"
+                          type="number"
+                          min="0"
+                          step={k === 'fsr' ? 1 : 0.1}
+                          value={draft.norms[type][k]}
+                          onChange={(e) => setNorm(type, k, e.target.value)}
+                        />
+                        {unit !== '1:' && <span className="muted small">{unit}</span>}
+                      </span>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 className="mini-head">Required documents</h3>
         <div className="table-wrap">
           <table className="table table-compact matrix">
             <thead>
@@ -151,13 +156,7 @@ export default function Rules() {
                   </td>
                   {cats.map(([cat, catLabel]) => (
                     <td key={cat} className="matrix-col">
-                      <input
-                        type="checkbox"
-                        className="check-box"
-                        aria-label={`${label} required for ${catLabel}`}
-                        checked={draft.requiredDocs[cat].includes(doc)}
-                        onChange={() => toggle('requiredDocs', cat, doc)}
-                      />
+                      <input type="checkbox" className="check-box" aria-label={`${label} required for ${catLabel}`} checked={draft.requiredDocs[cat].includes(doc)} onChange={() => toggleDoc(cat, doc)} />
                     </td>
                   ))}
                 </tr>
@@ -170,37 +169,127 @@ export default function Rules() {
           </table>
         </div>
       </section>
+      <SaveBar dirty={dirty} busy={busy} msg={msg}>
+        {(b) => (
+          <>
+            {year.own && (
+              <button className="btn btn-ghost" disabled={b} onClick={() => run(() => api(`/rules/years/${ay}`, { method: 'DELETE' }), `AY ${ay} now inherits its rules again.`)}>
+                Remove AY {ay} rules
+              </button>
+            )}
+            {dirty && <button className="btn btn-ghost" disabled={b} onClick={() => setDraft({ norms: structuredClone(year.norms), requiredDocs: structuredClone(year.requiredDocs) })}>Discard</button>}
+            <button className="btn btn-primary" disabled={b || (!dirty && year.own)} onClick={() => run(() => api(`/rules/years/${ay}`, { method: 'PUT', body: draft }), `Rules for AY ${ay} saved.`)}>
+              {b ? 'Saving…' : `Save AY ${ay} rules`}
+            </button>
+          </>
+        )}
+      </SaveBar>
+    </>
+  );
+}
 
-      <section className="card">
-        <div className="card-head">
-          <h2>Assignment roles</h2>
-          <span className="muted small">Which officer designations may be auto-assigned each category.</span>
-        </div>
-        <div className="role-grid">
-          {cats.map(([cat, label]) => (
-            <div key={cat} className="role-card">
-              <div className="cell-title">{label}</div>
-              {meta.DESIGNATIONS.map((d) => (
-                <label key={d} className="check-row">
-                  <input type="checkbox" className="check-box" checked={draft.assignmentRules[cat].includes(d)} onChange={() => toggle('assignmentRules', cat, d)} />
-                  {d}
-                </label>
-              ))}
-            </div>
-          ))}
-        </div>
-      </section>
+function GlobalRules({ info, setInfo, reloadMeta }) {
+  const { meta } = useAuth();
+  const [draft, setDraft] = useState(() => structuredClone(info.global));
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  useEffect(() => setDraft(structuredClone(info.global)), [info]);
+  const dirty = !same(draft, info.global);
+  const isDefault = same(info.global, info.globalDefaults);
+  const setSla = (k, v) => setDraft((d) => ({ ...d, sla: { ...d.sla, [k]: v } }));
+  const toggleRole = (cat, role) =>
+    setDraft((d) => {
+      const list = d.assignmentRules[cat];
+      return { ...d, assignmentRules: { ...d.assignmentRules, [cat]: list.includes(role) ? list.filter((x) => x !== role) : [...list, role] } };
+    });
+  const run = async (fn, ok) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      setInfo(await fn());
+      await reloadMeta();
+      setMsg({ tone: 'ok', text: ok });
+    } catch (e) {
+      setMsg({ tone: 'bad', text: e.message });
+    } finally {
+      setBusy(false);
+    }
+  };
 
-      <div className={`save-bar ${dirty ? 'is-dirty' : ''}`} role="status">
-        <span className="save-msg">
-          {msg ? <span className={msg.tone === 'ok' ? 'text-ok' : 'text-bad'}>{msg.text}</span> : dirty ? 'You have unsaved changes.' : 'All changes saved.'}
-        </span>
-        <div className="head-actions">
-          {!isDefault && <button className="btn btn-ghost" disabled={busy} onClick={reset}>Reset to defaults</button>}
-          {dirty && <button className="btn btn-ghost" disabled={busy} onClick={() => setDraft(structuredClone(data.rules))}>Discard</button>}
-          <button className="btn btn-primary" disabled={busy || !dirty} onClick={save}>{busy ? 'Saving…' : 'Save changes'}</button>
+  return (
+    <>
+      <div className="rules-top">
+        <section className="card">
+          <div className="card-head">
+            <h2>Deadlines</h2>
+            <span className="muted small">Apply to every year</span>
+          </div>
+          <div className="rule-fields">
+            {SLA_FIELDS.map(([k, label, unit]) => (
+              <label key={k} className="rule-field">
+                <span>
+                  <span className="rule-label">{label}</span>
+                  <span className="rule-unit">{unit}</span>
+                </span>
+                <input id={`sla-${k}`} className="input input-num" type="number" min="0" value={draft.sla[k]} onChange={(e) => setSla(k, e.target.value)} />
+              </label>
+            ))}
+          </div>
+        </section>
+        <section className="card">
+          <div className="card-head">
+            <h2>Assignment roles</h2>
+            <span className="muted small">Which designations may be auto-assigned each category</span>
+          </div>
+          <div className="role-grid">
+            {Object.entries(meta.CATEGORIES).map(([cat, label]) => (
+              <div key={cat} className="role-card">
+                <div className="cell-title">{label}</div>
+                {meta.DESIGNATIONS.map((d) => (
+                  <label key={d} className="check-row">
+                    <input type="checkbox" className="check-box" checked={draft.assignmentRules[cat].includes(d)} onChange={() => toggleRole(cat, d)} />
+                    {d}
+                  </label>
+                ))}
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+      <SaveBar dirty={dirty} busy={busy} msg={msg}>
+        {(b) => (
+          <>
+            {!isDefault && <button className="btn btn-ghost" disabled={b} onClick={() => run(() => api('/rules/global/reset', { method: 'POST' }), 'Deadlines and roles reset to defaults.')}>Reset to defaults</button>}
+            {dirty && <button className="btn btn-ghost" disabled={b} onClick={() => setDraft(structuredClone(info.global))}>Discard</button>}
+            <button className="btn btn-primary" disabled={b || !dirty} onClick={() => run(() => api('/rules/global', { method: 'PUT', body: draft }), 'Deadlines and roles saved.')}>
+              {b ? 'Saving…' : 'Save deadlines & roles'}
+            </button>
+          </>
+        )}
+      </SaveBar>
+    </>
+  );
+}
+
+export default function Rules() {
+  const { reloadMeta } = useAuth();
+  const { data, error, loading, setData } = useLoad(() => api('/rules'), []);
+  if (loading && !data) return <Loading />;
+  if (error) return <ErrorBox error={error} />;
+
+  return (
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1>Rules & norms</h1>
+          <p className="sub">
+            Norms and required documents are set per academic year, so changing next year's rules never affects applications already in progress. Every change is recorded in the audit trail.
+          </p>
         </div>
       </div>
+      <YearRules info={data} setInfo={setData} reloadMeta={reloadMeta} />
+      <h2 className="section-title">Process settings</h2>
+      <GlobalRules info={data} setInfo={setData} reloadMeta={reloadMeta} />
     </div>
   );
 }

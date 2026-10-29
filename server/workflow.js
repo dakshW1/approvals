@@ -4,7 +4,7 @@ import { query, one, insert, nowIso, tx } from './db.js';
 import { putFile, removeFile } from './supabase.js';
 import {
   STATUSES, OPEN_STATUSES, CATEGORIES, CATEGORY_CODES, DOC_TYPES, REQUIRED_DOCS, EXPIRING_DOC_TYPES,
-  ASSIGNMENT_RULES, SLA, NORMS, addDays, daysUntil, evaluateCompliance, deadlineStatus,
+  ASSIGNMENT_RULES, SLA, NORMS, addDays, daysUntil, evaluateCompliance, deadlineStatus, rulesForYear, requiredDocsFor,
 } from './rules.js';
 import { audit, notify, insertNotifications, alertsForApp, collegeUserIds, adminUserIds } from './alerts.js';
 
@@ -429,7 +429,8 @@ export async function getApplication(appId, user) {
   if (!row || !canView(row, user)) throw new HttpError(404, 'Application not found.');
   const app = decorate(row, await docsFor(appId));
   const byType = Object.fromEntries(app.docs.map((d) => [d.doc_type, d]));
-  const documents = REQUIRED_DOCS[app.category].map((t) => ({
+  const yearRules = rulesForYear(app.academic_year);
+  const documents = requiredDocsFor(app).map((t) => ({
     type: t,
     label: DOC_TYPES[t],
     expiring: EXPIRING_DOC_TYPES.includes(t),
@@ -455,7 +456,8 @@ export async function getApplication(appId, user) {
   return {
     app,
     institution,
-    norms: NORMS[app.institution_type],
+    norms: yearRules.norms[app.institution_type],
+    rules_source: yearRules.source,
     documents,
     history,
     activity,

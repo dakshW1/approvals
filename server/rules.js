@@ -71,33 +71,55 @@ export const SLA = {
 
 export const DESIGNATIONS = ['Assistant Director', 'Deputy Director'];
 
-// The objects above are the defaults. Admins can override them (stored in the settings table);
-// applyRules() updates them in place so every importer sees the new values immediately.
+// The objects above are the built-in defaults.
+//  - Deadlines (SLA) and assignment roles are global settings; applyGlobal() updates them in place.
+//  - Norms and required documents are versioned per academic year: each application is checked against the
+//    version for its own year, or the closest earlier year that has one, or the defaults. Editing next year's
+//    rules therefore never changes the outcome for applications already in progress.
 const clone = (o) => JSON.parse(JSON.stringify(o));
-export const currentRules = () => clone({ norms: NORMS, sla: SLA, requiredDocs: REQUIRED_DOCS, assignmentRules: ASSIGNMENT_RULES });
-export const DEFAULT_RULES = currentRules();
+export const DEFAULT_GLOBAL = clone({ sla: SLA, assignmentRules: ASSIGNMENT_RULES });
+export const DEFAULT_YEAR = clone({ norms: NORMS, requiredDocs: REQUIRED_DOCS });
+export const currentGlobal = () => clone({ sla: SLA, assignmentRules: ASSIGNMENT_RULES });
 
 const replace = (target, source) => {
   for (const k of Object.keys(target)) delete target[k];
   Object.assign(target, clone(source));
 };
-export function applyRules(r) {
-  replace(NORMS, r.norms);
-  replace(SLA, r.sla);
-  replace(REQUIRED_DOCS, r.requiredDocs);
-  replace(ASSIGNMENT_RULES, r.assignmentRules);
+export function applyGlobal(g) {
+  replace(SLA, g.sla);
+  replace(ASSIGNMENT_RULES, g.assignmentRules);
 }
 
+let yearVersions = [];
+export function setYearVersions(rows) {
+  yearVersions = rows.map((r) => ({ ...r })).sort((a, b) => a.academic_year.localeCompare(b.academic_year));
+}
+export const yearVersionList = () => clone(yearVersions);
+
+export function rulesForYear(academicYear) {
+  let found = null;
+  if (academicYear) for (const v of yearVersions) if (v.academic_year <= academicYear) found = v;
+  return found
+    ? { norms: found.norms, requiredDocs: found.requiredDocs, source: found.academic_year }
+    : { norms: DEFAULT_YEAR.norms, requiredDocs: DEFAULT_YEAR.requiredDocs, source: 'default' };
+}
+export const requiredDocsFor = (app) => rulesForYear(app.academic_year).requiredDocs[app.category] || [];
+
 const SLA_LIMITS = { reviewDays: [1, 180], responseDays: [1, 90], reReviewDays: [1, 90], warnDays: [0, 30], pickupDays: [0, 30], expiryWarnDays: [1, 365] };
-export function validateRules(input) {
+function checker() {
   const errors = [];
   const num = (v, min, max, label) => {
     const n = Number(v);
     if (!Number.isFinite(n) || n < min || n > max) errors.push(`${label} must be between ${min} and ${max}.`);
     return n;
   };
-  const out = { norms: {}, sla: {}, requiredDocs: {}, assignmentRules: {} };
-  for (const type of Object.keys(DEFAULT_RULES.norms)) {
+  return { errors, num };
+}
+
+export function validateYear(input) {
+  const { errors, num } = checker();
+  const out = { norms: {}, requiredDocs: {} };
+  for (const type of Object.keys(DEFAULT_YEAR.norms)) {
     const n = input?.norms?.[type] || {};
     out.norms[type] = {
       fsr: Math.round(num(n.fsr, 1, 100, `${type} faculty ratio`)),
@@ -105,11 +127,19 @@ export function validateRules(input) {
       sqmPerStudent: num(n.sqmPerStudent, 0, 100, `${type} built-up area per student`),
     };
   }
-  for (const [k, [min, max]] of Object.entries(SLA_LIMITS)) out.sla[k] = Math.round(num(input?.sla?.[k], min, max, k));
   for (const cat of Object.keys(CATEGORIES)) {
     const docs = [...new Set(input?.requiredDocs?.[cat] || [])].filter((d) => DOC_TYPES[d]);
     if (!docs.length) errors.push(`${CATEGORIES[cat]} needs at least one required document.`);
     out.requiredDocs[cat] = docs;
+  }
+  return { rules: out, errors };
+}
+
+export function validateGlobal(input) {
+  const { errors, num } = checker();
+  const out = { sla: {}, assignmentRules: {} };
+  for (const [k, [min, max]] of Object.entries(SLA_LIMITS)) out.sla[k] = Math.round(num(input?.sla?.[k], min, max, k));
+  for (const cat of Object.keys(CATEGORIES)) {
     const roles = [...new Set(input?.assignmentRules?.[cat] || [])].filter((d) => DESIGNATIONS.includes(d));
     if (!roles.length) errors.push(`${CATEGORIES[cat]} needs at least one officer role.`);
     out.assignmentRules[cat] = roles;
@@ -136,14 +166,15 @@ export function deadlineStatus(app, now = new Date()) {
 }
 
 export function evaluateCompliance(app, docs, institutionType, now = new Date()) {
-  const required = REQUIRED_DOCS[app.category] || [];
+  const yearRules = rulesForYear(app.academic_year);
+  const required = yearRules.requiredDocs[app.category] || [];
   const byType = {};
   for (const d of docs) byType[d.doc_type] = d;
   const missing = required.filter((t) => !byType[t]);
   const uploaded = required.filter((t) => byType[t]);
   const rejected = uploaded.filter((t) => byType[t].status === 'REJECTED');
   const verified = uploaded.filter((t) => byType[t].status === 'VERIFIED');
-  const norm = NORMS[institutionType] || NORMS.Engineering;
+  const norm = yearRules.norms[institutionType] || yearRules.norms.Engineering;
   const label = (t) => DOC_TYPES[t] || t;
   const checks = [];
 
