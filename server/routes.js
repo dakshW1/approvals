@@ -10,6 +10,7 @@ import { audit } from './alerts.js';
 import { rulesInfo, saveGlobal, resetGlobal, saveYear, deleteYear, yearRulesForClient } from './settings.js';
 import { listUsers, createUser, updateUser, enableLogin, setSuspended } from './users.js';
 import { mailEnabled } from './mailer.js';
+import { analytics } from './analytics.js';
 import {
   HttpError, canView, listApplications, getApplication, createApplication, updateApplication, addComment, previewCompliance, uploadDocument,
   reviewDocument, changeStatus, assignOfficer, officerWorkload, dashboard,
@@ -85,6 +86,7 @@ router.post('/users/:id/suspend', requireRole('ADMIN'), ah(async (req, res) => {
   res.json(await listUsers());
 }));
 
+router.get('/analytics', requireRole('ADMIN', 'OFFICER'), ah(async (req, res) => res.json(await analytics(req.user))));
 router.get('/dashboard', ah(async (req, res) => res.json(await dashboard(req.user))));
 
 router.get('/applications', ah(async (req, res) => {

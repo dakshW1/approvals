@@ -12,6 +12,7 @@ import ApplicationDetail from './pages/ApplicationDetail.jsx';
 import NewApplication from './pages/NewApplication.jsx';
 import Users from './pages/Users.jsx';
 import Rules from './pages/Rules.jsx';
+import Analytics from './pages/Analytics.jsx';
 import AuditReports from './pages/AuditReports.jsx';
 
 const AuthContext = createContext(null);
@@ -117,6 +118,7 @@ export default function App() {
           <Route path="/applications/:id" element={<ApplicationDetail />} />
           {user.role === 'ADMIN' && <Route path="/users" element={<Users />} />}
           {user.role === 'ADMIN' && <Route path="/rules" element={<Rules />} />}
+          {user.role !== 'COLLEGE' && <Route path="/analytics" element={<Analytics />} />}
           {user.role === 'ADMIN' && <Route path="/officers" element={<Navigate to="/users" replace />} />}
           {user.role === 'ADMIN' && <Route path="/audit" element={<AuditReports />} />}
           <Route path="*" element={<Navigate to="/" replace />} />

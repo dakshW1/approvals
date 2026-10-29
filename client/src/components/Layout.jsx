@@ -95,6 +95,7 @@ export default function Layout({ children }) {
     { to: '/', label: 'Dashboard', short: 'Home', icon: 'home', end: true },
     { to: '/applications', label: user.role === 'COLLEGE' ? 'My applications' : 'Applications', short: 'Apps', icon: 'list', end: true },
     user.role === 'COLLEGE' && { to: '/applications/new', label: 'New application', short: 'New', icon: 'plus' },
+    user.role !== 'COLLEGE' && { to: '/analytics', label: 'Analytics', short: 'Stats', icon: 'chart' },
     user.role === 'ADMIN' && { to: '/users', label: 'Users & officers', short: 'Users', icon: 'users' },
     user.role === 'ADMIN' && { to: '/rules', label: 'Rules & norms', short: 'Rules', icon: 'sliders' },
     user.role === 'ADMIN' && { to: '/audit', label: 'Audit trail & reports', short: 'Audit', icon: 'audit' },

@@ -736,3 +736,38 @@ textarea.input { height: auto; padding: 12px 14px; resize: vertical; line-height
   .year-chip { flex: none; }
   .year-add { margin-left: 0; flex: none; }
 }
+
+/* Analytics. Chart colours validated for colour-vision deficiency (blue / amber). */
+.viz-root, .page { --series-1: #2f6fb0; --series-2: #c97a2b; }
+.kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.tile-static { cursor: default; }
+.tile-static:hover { transform: none; box-shadow: var(--shadow); }
+.analytics-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.card-pad { padding: 20px 22px 4px; }
+.viz { position: relative; }
+.viz svg { width: 100%; height: auto; display: block; overflow: visible; }
+.viz-grid { stroke: var(--line); stroke-width: 1; }
+.viz-tick { fill: var(--muted); font: 600 11px var(--font); }
+.viz-s1 { fill: var(--series-1); }
+.viz-s2 { fill: var(--series-2); }
+.viz-dim path { opacity: 0.35; }
+.viz-hit { fill: transparent; cursor: default; outline: none; }
+.viz-tip {
+  position: absolute; top: 0; transform: translateX(-50%); pointer-events: none; z-index: 2;
+  background: var(--ink); color: #fff; border-radius: 12px; padding: 9px 12px; font-size: 12px; font-weight: 600;
+  display: flex; flex-direction: column; gap: 3px; white-space: nowrap; box-shadow: var(--shadow-lift);
+}
+.viz-tip .muted { color: rgba(255, 255, 255, 0.65); }
+.viz-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.viz-legend li { display: inline-flex; align-items: center; gap: 7px; }
+.viz-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.viz-legend .viz-swatch { margin-right: 0; }
+.viz-swatch.s1 { background: var(--series-1); }
+.viz-swatch.s2 { background: var(--series-2); }
+.stage-bars li { grid-template-columns: minmax(130px, 190px) 1fr auto; }
+.ratebar { display: inline-flex; align-items: center; gap: 8px; min-width: 110px; }
+.ratebar-track { flex: 1; height: 6px; border-radius: 999px; background: var(--neutral-soft); overflow: hidden; }
+.ratebar-fill { display: block; height: 100%; background: var(--ink); border-radius: 999px; }
+.ratebar-num { font-family: var(--display); font-weight: 800; font-size: 13px; min-width: 36px; text-align: right; }
+@media (max-width: 1080px) { .analytics-grid { grid-template-columns: 1fr; } .kpi-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .viz-tick { font-size: 15px; } .card-pad { padding: 18px 18px 4px; } }
