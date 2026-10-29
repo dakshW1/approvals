@@ -4,9 +4,12 @@ import { query, one } from './db.js';
 import { authenticate, requireRole, REGIONS } from './auth.js';
 import { signedUrl } from './supabase.js';
 import {
-  STATUSES, CATEGORIES, DOC_TYPES, REQUIRED_DOCS, EXPIRING_DOC_TYPES, NORMS, SLA, ASSIGNMENT_RULES,
+  STATUSES, CATEGORIES, DOC_TYPES, REQUIRED_DOCS, EXPIRING_DOC_TYPES, NORMS, SLA, ASSIGNMENT_RULES, DESIGNATIONS,
 } from './rules.js';
 import { audit } from './alerts.js';
+import { rulesInfo, saveRules, resetRules } from './settings.js';
+import { listUsers, createUser, updateUser, enableLogin, setSuspended } from './users.js';
+import { mailEnabled } from './mailer.js';
 import {
   HttpError, canView, listApplications, getApplication, createApplication, previewCompliance, uploadDocument,
   reviewDocument, changeStatus, assignOfficer, officerWorkload, dashboard,
@@ -41,8 +44,38 @@ router.post('/auth/signed-in', ah(async (req, res) => {
 }));
 
 router.get('/meta', (req, res) =>
-  res.json({ STATUSES, CATEGORIES, DOC_TYPES, REQUIRED_DOCS, EXPIRING_DOC_TYPES, NORMS, SLA, ASSIGNMENT_RULES })
+  res.json({ STATUSES, CATEGORIES, DOC_TYPES, REQUIRED_DOCS, EXPIRING_DOC_TYPES, NORMS, SLA, ASSIGNMENT_RULES, DESIGNATIONS, EMAIL_ENABLED: mailEnabled })
 );
+
+// ---- Rules & norms (admin) ----
+router.get('/rules', requireRole('ADMIN'), ah(async (req, res) => res.json(await rulesInfo())));
+router.put('/rules', requireRole('ADMIN'), ah(async (req, res) => {
+  await saveRules(req.body, req.user.id);
+  res.json(await rulesInfo());
+}));
+router.post('/rules/reset', requireRole('ADMIN'), ah(async (req, res) => {
+  await resetRules(req.user.id);
+  res.json(await rulesInfo());
+}));
+
+// ---- User management (admin) ----
+router.get('/users', requireRole('ADMIN'), ah(async (req, res) => res.json(await listUsers())));
+router.post('/users', requireRole('ADMIN'), ah(async (req, res) => {
+  const r = await createUser(req.body || {}, req.user);
+  res.status(201).json({ ...r, ...(await listUsers()) });
+}));
+router.patch('/users/:id', requireRole('ADMIN'), ah(async (req, res) => {
+  await updateUser(Number(req.params.id), req.body || {}, req.user);
+  res.json(await listUsers());
+}));
+router.post('/users/:id/login', requireRole('ADMIN'), ah(async (req, res) => {
+  await enableLogin(Number(req.params.id), req.user);
+  res.json(await listUsers());
+}));
+router.post('/users/:id/suspend', requireRole('ADMIN'), ah(async (req, res) => {
+  await setSuspended(Number(req.params.id), Boolean(req.body?.suspended), req.user);
+  res.json(await listUsers());
+}));
 
 router.get('/dashboard', ah(async (req, res) => res.json(await dashboard(req.user))));
 
@@ -85,6 +118,14 @@ router.get('/documents/:id/file', ah(async (req, res) => {
   const app = doc && (await one('SELECT * FROM applications WHERE id = ?', [doc.application_id]));
   if (!doc || !canView(app, req.user)) throw new HttpError(404, 'Document not found.');
   res.redirect(await signedUrl(doc.stored_name));
+}));
+
+// The deficiency letter PDF is built in the browser; this records that it was issued.
+router.post('/applications/:id/letter', ah(async (req, res) => {
+  const app = await one('SELECT * FROM applications WHERE id = ?', [Number(req.params.id)]);
+  if (!app || !canView(app, req.user)) throw new HttpError(404, 'Application not found.');
+  await audit(req.user.id, 'DEFICIENCY_LETTER_GENERATED', 'application', app.id, `Deficiency letter for ${app.app_no} downloaded`, app.id);
+  res.json({ ok: true });
 }));
 
 router.post('/documents/:id/review', requireRole('OFFICER', 'ADMIN'), ah(async (req, res) => {

@@ -70,6 +70,8 @@ export async function authenticate(req, res, next) {
     const profile = await profileFor(authUser);
     if (!profile)
       return res.status(403).json({ code: 'NO_PROFILE', error: 'This account is not linked to the portal yet. Ask the AICTE administrator to grant you access.' });
+    if (profile.suspended)
+      return res.status(403).json({ code: 'SUSPENDED', error: 'Your access to the portal has been suspended. Contact the AICTE administrator.' });
     req.user = await publicUser(profile);
     req.token = String(token);
     next();

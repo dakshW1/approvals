@@ -10,7 +10,8 @@ import Dashboard from './pages/Dashboard.jsx';
 import Applications from './pages/Applications.jsx';
 import ApplicationDetail from './pages/ApplicationDetail.jsx';
 import NewApplication from './pages/NewApplication.jsx';
-import Officers from './pages/Officers.jsx';
+import Users from './pages/Users.jsx';
+import Rules from './pages/Rules.jsx';
 import AuditReports from './pages/AuditReports.jsx';
 
 const AuthContext = createContext(null);
@@ -78,6 +79,8 @@ export default function App() {
     if (user) api('/meta').then(setMeta).catch(() => {});
   }, [user]);
 
+  const reloadMeta = useCallback(() => api('/meta').then(setMeta), []);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setUser(null);
@@ -104,14 +107,16 @@ export default function App() {
   if (!user || !meta) return <Loading />;
 
   return (
-    <AuthContext.Provider value={{ user, meta, signOut }}>
+    <AuthContext.Provider value={{ user, meta, signOut, reloadMeta }}>
       <Layout>
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/applications" element={<Applications />} />
           {user.role === 'COLLEGE' && <Route path="/applications/new" element={<NewApplication />} />}
           <Route path="/applications/:id" element={<ApplicationDetail />} />
-          {user.role === 'ADMIN' && <Route path="/officers" element={<Officers />} />}
+          {user.role === 'ADMIN' && <Route path="/users" element={<Users />} />}
+          {user.role === 'ADMIN' && <Route path="/rules" element={<Rules />} />}
+          {user.role === 'ADMIN' && <Route path="/officers" element={<Navigate to="/users" replace />} />}
           {user.role === 'ADMIN' && <Route path="/audit" element={<AuditReports />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
