@@ -36,11 +36,55 @@ const ICON_PATHS = {
   building: 'M3 21h18M5 21V7l7-4 7 4v14M9 21v-4h6v4M9 10h.01M15 10h.01M9 14h.01M15 14h.01',
   user: 'M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8',
   chart: 'M3 3v18h18M7 15l4-4 3 3 5-6',
+  sun: 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42',
+  moon: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z',
+  monitor: 'M3 4h18v12H3zM8 20h8M12 16v4',
   sliders: 'M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6',
   file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M12 18v-6M9 15l3 3 3-3',
   x: 'M18 6 6 18M6 6l12 12',
   mail: 'M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 6l-10 7L2 6',
 };
+
+// Theme: "system" follows the device; "light" / "dark" are stored per browser.
+const THEME_KEY = 'aicte_theme';
+const readTheme = () => {
+  try {
+    return localStorage.getItem(THEME_KEY) || 'system';
+  } catch {
+    return 'system';
+  }
+};
+export function applyTheme(theme) {
+  if (theme === 'light' || theme === 'dark') document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+}
+export function ThemeToggle({ className = '' }) {
+  const [theme, setTheme] = useState(readTheme);
+  const choose = (t) => {
+    setTheme(t);
+    applyTheme(t);
+    try {
+      if (t === 'system') localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, t);
+    } catch {
+      /* storage unavailable: the choice lasts for this visit */
+    }
+  };
+  const options = [
+    ['system', 'monitor', 'Match device'],
+    ['light', 'sun', 'Light'],
+    ['dark', 'moon', 'Dark'],
+  ];
+  return (
+    <div className={`theme-switch ${className}`} role="group" aria-label="Theme">
+      {options.map(([t, icon, label]) => (
+        <button key={t} type="button" aria-pressed={theme === t} title={label} aria-label={label} onClick={() => choose(t)}>
+          <Icon name={icon} size={16} />
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export function Modal({ title, onClose, children, footer }) {
   useEffect(() => {

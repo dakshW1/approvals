@@ -3,7 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../App.jsx';
 import { api } from '../api.js';
 import { supabase } from '../supabase.js';
-import { Icon, LogoMark, ROLE_LABEL, timeAgo } from './ui.jsx';
+import { Icon, LogoMark, ROLE_LABEL, ThemeToggle, timeAgo } from './ui.jsx';
 
 function NotificationBell() {
   const { user } = useAuth();
@@ -136,6 +136,7 @@ export default function Layout({ children }) {
             </span>
           </div>
           <div className="topbar-right">
+            <ThemeToggle />
             <NotificationBell />
           </div>
         </header>

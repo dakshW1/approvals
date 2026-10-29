@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { supabase } from '../supabase.js';
-import { Icon, Logo } from '../components/ui.jsx';
+import { Icon, Logo, ThemeToggle } from '../components/ui.jsx';
 
 const DEMO = [
   { email: 'college@aicte.demo', role: 'Institution', who: 'Shri Venkatesh Institute of Technology, Pune', icon: 'building' },
@@ -313,6 +313,7 @@ export default function Login() {
       </section>
 
       <section className="login-panel">
+        <ThemeToggle className="login-theme" />
         {mode === 'signin' && <SignIn setMode={setMode} />}
         {mode === 'register' && <Register setMode={setMode} />}
         {mode === 'forgot' && <Forgot setMode={setMode} />}
