@@ -155,7 +155,7 @@ export default function Dashboard() {
             <div className="empty">Nothing overdue or failing compliance. Good work.</div>
           ) : (
             <div className="table-wrap">
-              <table className="table table-compact">
+              <table className="table table-compact table-cards">
                 <thead>
                   <tr>
                     <th>Application</th>
@@ -167,13 +167,13 @@ export default function Dashboard() {
                 <tbody>
                   {data.attention.map((a) => (
                     <tr key={a.id} className="row-link" onClick={() => navigate(`/applications/${a.id}`)}>
-                      <td>
+                      <td data-label="Application" className="card-title-cell">
                         <div className="cell-title">{a.institution_name}</div>
                         <div className="cell-sub mono">{a.app_no}</div>
                       </td>
-                      <td><StatusBadge status={a.status} /></td>
-                      <td><DueChip app={a} /></td>
-                      <td><ScoreBar score={a.compliance.score} /></td>
+                      <td data-label="Status"><StatusBadge status={a.status} /></td>
+                      <td data-label="Deadline"><DueChip app={a} /></td>
+                      <td data-label="Compliance"><ScoreBar score={a.compliance.score} /></td>
                     </tr>
                   ))}
                 </tbody>

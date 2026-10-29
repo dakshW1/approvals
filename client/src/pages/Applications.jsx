@@ -76,7 +76,7 @@ export default function Applications() {
       ) : (
         <section className="card card-flush">
           <div className="table-wrap">
-            <table className="table">
+            <table className="table table-cards">
               <thead>
                 <tr>
                   <th>Application</th>
@@ -93,26 +93,26 @@ export default function Applications() {
               <tbody>
                 {data?.map((a) => (
                   <tr key={a.id} className="row-link" onClick={() => navigate(`/applications/${a.id}`)}>
-                    <td>
+                    <td data-label="Application" className="card-title-cell">
                       <div className="cell-title">{a.program}</div>
                       <div className="cell-sub mono">{a.app_no}</div>
                     </td>
                     {user.role !== 'COLLEGE' && (
-                      <td>
+                      <td data-label="Institution">
                         <div className="cell-title">{a.institution_name}</div>
                         <div className="cell-sub">{a.city}, {a.state}</div>
                       </td>
                     )}
-                    <td>{a.category_label}</td>
-                    <td><StatusBadge status={a.status} /></td>
-                    <td>{a.pending_with || <span className="muted">-</span>}</td>
-                    <td><DueChip app={a} /></td>
-                    <td>
+                    <td data-label="Category">{a.category_label}</td>
+                    <td data-label="Status"><StatusBadge status={a.status} /></td>
+                    <td data-label="Pending with">{a.pending_with || <span className="muted">-</span>}</td>
+                    <td data-label="Deadline"><DueChip app={a} /></td>
+                    <td data-label="Compliance">
                       <ScoreBar score={a.compliance.score} />
                       {a.compliance.missing > 0 && <div className="cell-sub text-bad">{a.compliance.missing} doc(s) missing</div>}
                     </td>
-                    {user.role === 'ADMIN' && <td>{a.officer_name || <span className="text-bad">Unassigned</span>}</td>}
-                    <td className="nowrap">{fmtDate(a.submitted_at)}</td>
+                    {user.role === 'ADMIN' && <td data-label="Officer">{a.officer_name || <span className="text-bad">Unassigned</span>}</td>}
+                    <td data-label="Submitted" className="nowrap">{fmtDate(a.submitted_at)}</td>
                   </tr>
                 ))}
               </tbody>

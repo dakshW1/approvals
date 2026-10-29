@@ -51,7 +51,7 @@ export default function AuditReports() {
       ) : (
         <section className="card card-flush">
           <div className="table-wrap">
-            <table className="table">
+            <table className="table table-cards">
               <thead>
                 <tr>
                   <th>Time</th>
@@ -64,16 +64,16 @@ export default function AuditReports() {
               <tbody>
                 {data.rows.map((r) => (
                   <tr key={r.id}>
-                    <td className="nowrap mono small">{fmtDateTime(r.created_at)}</td>
-                    <td>
+                    <td data-label="Time" className="nowrap small">{fmtDateTime(r.created_at)}</td>
+                    <td data-label="User">
                       <div className="cell-title">{r.user_name || 'System'}</div>
                       <div className="cell-sub">{r.user_role ? ROLE_LABEL[r.user_role] : 'Automated rule'}</div>
                     </td>
-                    <td><span className="mono audit-action">{r.action}</span></td>
-                    <td className="nowrap">
+                    <td data-label="Action"><span className="audit-action">{r.action}</span></td>
+                    <td data-label="Application" className="nowrap">
                       {r.app_no ? <Link className="link mono small" to={`/applications/${r.application_id}`}>{r.app_no}</Link> : <span className="muted">-</span>}
                     </td>
-                    <td className="details-cell">{r.details}</td>
+                    <td data-label="Details" className="details-cell">{r.details}</td>
                   </tr>
                 ))}
               </tbody>
