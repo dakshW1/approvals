@@ -81,6 +81,11 @@ Only these three can sign in. The other sample officers and principals exist as 
 - **Approve with an exception**: an officer can approve despite unmet checks only by writing a reason (at least 20 characters). The reason and the waived checks are stored and shown on the application, and the admin is alerted. Missing documents can never be waived.
 - **Messages**: a thread on each application between the college and AICTE staff, with live alerts to the other side.
 - **Deadlines kept out of the compliance score**: an overdue review no longer lowers the college's score. The deadline is shown as its own flag, with who the delay is on.
+- **Rules per academic year**: norms and required documents are versioned per year. Each application is checked against its own year's rules (or the nearest earlier year, or the defaults), so changing next year's rules never affects applications already in progress. Deadlines and assignment roles stay global.
+- **Analytics** (admin and officers): days to decision, on-time rate, approval rate, time spent in each stage, monthly volume (with a table view), and comparisons by region, category and officer.
+- **Site inspections with geo-tagged photos**: officers schedule an expert committee visit, upload phone photos, and record findings and a recommendation. Each photo's GPS (read from the photo's EXIF data, or the phone's location) is measured against the campus. New-institution and intake-increase applications cannot be approved until the inspection is complete, and a "deficient" report can only be waived with a recorded exception.
+- **Automated document check**: every uploaded PDF is read and compared with the application. It checks that it is the expected kind of document, that it names the institution, and that a certificate's printed validity date matches the date entered and hasn't passed. This is rule-based text analysis (no external AI service). Scanned images are flagged for a manual check.
+- **Demo conversations** between principals, officers and the Director on several applications.
 - **Phone layout**: a bottom tab bar, tables shown as cards, and full-width dialogs.
 
 ## 3-minute demo script
