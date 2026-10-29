@@ -104,7 +104,10 @@ export default function Applications() {
                       </td>
                     )}
                     <td data-label="Category">{a.category_label}</td>
-                    <td data-label="Status"><StatusBadge status={a.status} /></td>
+                    <td data-label="Status">
+                      <StatusBadge status={a.status} />
+                      {a.override_note && <span className="chip chip-exception" title={a.override_note}>Exception</span>}
+                    </td>
                     <td data-label="Pending with">{a.pending_with || <span className="muted">-</span>}</td>
                     <td data-label="Deadline"><DueChip app={a} /></td>
                     <td data-label="Compliance">

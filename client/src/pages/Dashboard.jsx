@@ -146,7 +146,7 @@ export default function Dashboard() {
         <div className="tiles">
           <Tile label="Pending review" icon="clock" value={t.pending} to="/applications?flag=pending" foot={`${t.under_review} under review`} />
           <Tile label="Action required" icon="alert" value={t.action_required} to="/applications?status=ACTION_REQUIRED" tone={t.action_required ? 'warn' : ''} foot="Waiting on institution" />
-          <Tile label="Approved" icon="check" value={t.approved} to="/applications?status=APPROVED" tone="ok" foot={data.avg_decision_days ? `Avg ${data.avg_decision_days} days to decide` : `${t.rejected} rejected`} />
+          <Tile label="Approved" icon="check" value={t.approved} to="/applications?status=APPROVED" tone="ok" foot={t.exceptions ? `${t.exceptions} with an exception` : data.avg_decision_days ? `Avg ${data.avg_decision_days} days to decide` : `${t.rejected} rejected`} />
           <Tile label="Compliance alerts" icon="shield" value={t.non_compliant} to="/applications?flag=non-compliant" tone={t.non_compliant ? 'bad' : ''} foot={`of ${t.total} applications`} />
         </div>
       </div>

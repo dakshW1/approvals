@@ -5,7 +5,7 @@ import { mailEnabled, deliverable, sendMail, layout, appUrl } from './mailer.js'
 // Alert types that are also emailed. Routine updates (an upload, review not started) stay in-app only.
 const EMAIL_TYPES = new Set([
   'OVERDUE', 'ESCALATION', 'DEADLINE', 'MISSING_DOCS', 'CERT_EXPIRED', 'CERT_EXPIRING', 'ASSIGNED', 'ASSIGNMENT_FAILED',
-  'DOCUMENT_REJECTED', 'RESUBMITTED', 'STATUS_UNDER_REVIEW', 'STATUS_ACTION_REQUIRED', 'STATUS_APPROVED', 'STATUS_REJECTED',
+  'DOCUMENT_REJECTED', 'RESUBMITTED', 'STATUS_UNDER_REVIEW', 'STATUS_ACTION_REQUIRED', 'STATUS_APPROVED', 'STATUS_REJECTED', 'APPROVED_WITH_EXCEPTION',
 ]);
 
 // One email per person per batch, listing every new alert for them.

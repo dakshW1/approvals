@@ -102,7 +102,7 @@ router.patch('/applications/:id', requireRole('COLLEGE'), ah(async (req, res) =>
 }));
 
 router.post('/applications/:id/status', ah(async (req, res) => {
-  await changeStatus(Number(req.params.id), req.user, req.body?.to, req.body?.remark);
+  await changeStatus(Number(req.params.id), req.user, req.body?.to, req.body?.remark, { override: req.body?.override === true });
   res.json(await getApplication(Number(req.params.id), req.user));
 }));
 

@@ -156,6 +156,9 @@ export async function migrate() {
     -- Drafts have not been submitted yet, so they have no submission date or deadline.
     ALTER TABLE applications ALTER COLUMN submitted_at DROP NOT NULL;
     ALTER TABLE applications ALTER COLUMN due_date DROP NOT NULL;
+    -- An officer may approve despite unmet checks, but must record why.
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS override_note TEXT;
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS override_checks TEXT;
     -- Admin-editable rules (norms, deadlines, required documents, assignment roles) as one JSON document.
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,

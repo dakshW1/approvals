@@ -335,7 +335,15 @@ export function allowedActions(app, user) {
     .map(([to]) => ({ to, ...ACTION_LABELS[`${app.status}>${to}`] }));
 }
 
-export async function changeStatus(appId, user, to, remark) {
+export const MIN_EXCEPTION_REASON = 20;
+
+// Checks that stand between an application and approval. Missing documents can never be waived.
+export function approvalBlockers(compliance) {
+  const blocking = compliance.checks.filter((ch) => ch.key !== 'timeline' && ch.status !== 'pass');
+  return { blocking, overridable: !blocking.some((b) => b.key === 'docs_uploaded') };
+}
+
+export async function changeStatus(appId, user, to, remark, { override = false } = {}) {
   const row = await one(`${BASE_SQL} WHERE a.id = ?`, [appId]);
   if (!row || !canView(row, user)) throw new HttpError(404, 'Application not found.');
   const allowed = TRANSITIONS[row.status]?.[to];
@@ -345,11 +353,17 @@ export async function changeStatus(appId, user, to, remark) {
   const meta = ACTION_LABELS[`${row.status}>${to}`];
   remark = String(remark || '').trim();
   if (meta.needsRemark && !remark) throw new HttpError(400, 'Add a remark explaining this step.');
+  let exception = null;
   if (to === 'APPROVED') {
-    const c = decorate(row, await docsFor(appId)).compliance;
-    const blocking = c.checks.filter((ch) => ch.key !== 'timeline' && ch.status !== 'pass');
-    if (blocking.length)
-      throw new HttpError(400, `Cannot approve yet. Unmet: ${blocking.map((b) => b.label).join('; ')}.`);
+    const { blocking, overridable } = approvalBlockers(decorate(row, await docsFor(appId)).compliance);
+    if (blocking.length) {
+      const unmet = blocking.map((b) => b.label).join('; ');
+      if (!overridable) throw new HttpError(400, `Cannot approve: every required document must be uploaded first, even with an exception. Unmet: ${unmet}.`);
+      if (!override) throw new HttpError(400, `Cannot approve yet. Unmet: ${unmet}. Choose "Approve with exception" and give a reason to proceed.`);
+      if (remark.length < MIN_EXCEPTION_REASON)
+        throw new HttpError(400, `Explain the exception in at least ${MIN_EXCEPTION_REASON} characters, so reviewers understand why the norms were waived.`);
+      exception = { checks: blocking.map((b) => `${b.label}: ${b.detail}`).join('; '), reason: remark };
+    }
   }
   const now = nowIso();
   let due = row.due_date;
@@ -362,6 +376,10 @@ export async function changeStatus(appId, user, to, remark) {
     await query('INSERT INTO status_history (application_id, from_status, to_status, user_id, remark, created_at) VALUES (?,?,?,?,?,?)',
       [appId, row.status, to, user.id, remark || null, now]);
     await audit(user.id, 'STATUS_CHANGED', 'application', appId, `${STATUSES[row.status]} -> ${STATUSES[to]}${remark ? `: ${remark}` : ''}`, appId);
+    if (exception) {
+      await query('UPDATE applications SET override_note = ?, override_checks = ? WHERE id = ?', [exception.reason, exception.checks, appId]);
+      await audit(user.id, 'APPROVED_WITH_EXCEPTION', 'application', appId, `Waived: ${exception.checks}. Reason: ${exception.reason}`, appId);
+    }
   });
   const message = {
     UNDER_REVIEW: row.status === 'ACTION_REQUIRED' ? null : `${row.app_no} is now under review by ${row.officer_name}.`,
@@ -375,6 +393,9 @@ export async function changeStatus(appId, user, to, remark) {
       rows.push([u, appId, `STATUS_${to}`, to === 'REJECTED' || to === 'ACTION_REQUIRED' ? 'warning' : 'info', message, null]);
   if (row.status === 'ACTION_REQUIRED')
     rows.push([row.assigned_officer_id, appId, 'RESUBMITTED', 'info', `${row.app_no} was resubmitted by the institution: ${remark}`, null]);
+  if (exception)
+    for (const u of await adminUserIds())
+      rows.push([u, appId, 'APPROVED_WITH_EXCEPTION', 'warning', `${row.app_no} was approved with an exception by ${user.name}. Waived: ${exception.checks}`, null]);
   await insertNotifications(rows);
   await alertsForApp(appId);
 }
@@ -415,6 +436,7 @@ export async function getApplication(appId, user) {
     activity,
     assignment_reason: assignment?.details || null,
     actions: allowedActions(app, user),
+    approval: app.status === 'UNDER_REVIEW' ? { ...approvalBlockers(app.compliance), minReason: MIN_EXCEPTION_REASON } : null,
     permissions: {
       canUpload: user.role === 'COLLEGE' && (app.is_open || app.is_draft),
       canEdit: user.role === 'COLLEGE' && app.can_edit,
@@ -445,6 +467,7 @@ export async function dashboard(user) {
   };
   totals.pending = totals.submitted + totals.under_review;
   totals.drafts = all.length - apps.length;
+  totals.exceptions = count((a) => a.status === 'APPROVED' && a.override_note);
   const byCategory = Object.entries(CATEGORIES).map(([key, label]) => ({
     key, label, count: count((a) => a.category === key), open: open.filter((a) => a.category === key).length,
   }));

@@ -187,19 +187,39 @@ function ActionPanel({ data, onChanged }) {
   const [remark, setRemark] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const { app, actions } = data;
+  const [confirmException, setConfirmException] = useState(false);
+  const { app, actions, approval } = data;
   if (!actions.length) return null;
+  // Unmet checks the officer would be waiving by approving now.
+  const blocking = approval?.blocking || [];
+  const needsException = blocking.length > 0;
 
   const act = async (a) => {
+    const isException = a.to === 'APPROVED' && needsException;
     if (a.needsRemark && !remark.trim()) {
       setError(`Add a remark before choosing "${a.label}".`);
       return;
     }
+    if (isException) {
+      if (!approval.overridable) {
+        setError('Every required document must be uploaded before approval, even with an exception.');
+        return;
+      }
+      if (remark.trim().length < approval.minReason) {
+        setError(`Explain why the unmet checks are being waived (at least ${approval.minReason} characters).`);
+        return;
+      }
+      if (!confirmException) {
+        setError('Tick the confirmation box to approve with an exception.');
+        return;
+      }
+    }
     setBusy(true);
     setError('');
     try {
-      onChanged(await api(`/applications/${app.id}/status`, { method: 'POST', body: { to: a.to, remark } }));
+      onChanged(await api(`/applications/${app.id}/status`, { method: 'POST', body: { to: a.to, remark, override: isException } }));
       setRemark('');
+      setConfirmException(false);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -211,27 +231,60 @@ function ActionPanel({ data, onChanged }) {
     app.status === 'DRAFT'
       ? 'This draft is visible only to your institution. Submit it when the details are complete; missing documents can still be added later.'
       : app.status === 'SUBMITTED'
-      ? 'Start the review to verify documents and record a decision.'
-      : app.status === 'ACTION_REQUIRED'
-        ? 'Fix the issues listed by the officer, upload any missing documents, then resubmit.'
-        : 'Approval is allowed only when every compliance check passes. Request action or reject with a clear remark.';
+        ? 'Start the review to verify documents and record a decision.'
+        : app.status === 'ACTION_REQUIRED'
+          ? 'Fix the issues listed by the officer, upload any missing documents, then resubmit.'
+          : needsException
+            ? 'Some checks are not met. Request action from the institution, reject, or approve with a recorded exception.'
+            : 'Every compliance check passes. You can approve, or request action or reject with a clear remark.';
 
   return (
     <section className="card action-card">
       <h2>Take action</h2>
       <p className="muted small">{hint}</p>
+      {app.status === 'UNDER_REVIEW' && needsException && (
+        <div className="exception-box">
+          <div className="exception-title">Not yet met</div>
+          <ul>
+            {blocking.map((b) => (
+              <li key={b.key}><strong>{b.label}</strong> · {b.detail}</li>
+            ))}
+          </ul>
+          {approval.overridable ? (
+            <label className="check-row small">
+              <input type="checkbox" className="check-box" checked={confirmException} onChange={(e) => setConfirmException(e.target.checked)} />
+              I am approving despite these checks. My reason below will be recorded and the administrator will be alerted.
+            </label>
+          ) : (
+            <p className="small text-bad">Missing documents must be uploaded before this can be approved, even with an exception.</p>
+          )}
+        </div>
+      )}
       <textarea
         id="action-remark"
         className="input"
         rows={3}
-        placeholder={app.status === 'ACTION_REQUIRED' ? 'Describe what you fixed' : 'Remark for the institution (required to request action or reject)'}
+        placeholder={
+          app.status === 'ACTION_REQUIRED'
+            ? 'Describe what you fixed'
+            : needsException
+              ? 'Remark for the institution, or the reason for approving with an exception'
+              : 'Remark for the institution (required to request action or reject)'
+        }
         value={remark}
         onChange={(e) => setRemark(e.target.value)}
       />
       {error && <div className="alert alert-bad">{error}</div>}
       <div className="action-buttons">
         {actions.map((a) => (
-          <button key={a.to} className={`btn btn-${a.variant}`} disabled={busy} onClick={() => act(a)}>{a.label}</button>
+          <button
+            key={a.to}
+            className={`btn btn-${a.to === 'APPROVED' && needsException ? 'warn' : a.variant}`}
+            disabled={busy || (a.to === 'APPROVED' && needsException && !approval.overridable)}
+            onClick={() => act(a)}
+          >
+            {a.to === 'APPROVED' && needsException ? 'Approve with exception' : a.label}
+          </button>
         ))}
       </div>
     </section>
@@ -309,6 +362,13 @@ export default function ApplicationDetail() {
         </div>
         <Stepper app={app} history={history} />
       </div>
+
+      {app.override_note && (
+        <div className="alert alert-warn exception-note">
+          <strong>Approved with an exception.</strong> Waived: {app.override_checks}
+          <div className="small">Reason recorded by {app.officer_name || 'the officer'}: "{app.override_note}"</div>
+        </div>
+      )}
 
       {app.is_draft && (
         <div className="alert alert-warn">

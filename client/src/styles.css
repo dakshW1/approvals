@@ -391,6 +391,13 @@ textarea.input { height: auto; padding: 12px 14px; resize: vertical; line-height
 
 .action-card { box-shadow: 0 0 0 2px var(--ink), var(--shadow-lift); }
 .action-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.exception-box { background: var(--warn-soft); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.exception-title { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--warn); }
+.exception-box ul { margin: 0; padding-left: 18px; font-size: 12.5px; display: flex; flex-direction: column; gap: 3px; }
+.exception-box .check-row { align-items: flex-start; font-weight: 600; }
+.exception-box .check-box { margin-top: 2px; flex: none; }
+.exception-note .small { margin-top: 4px; font-weight: 600; }
+.chip-exception { background: var(--warn-soft); color: var(--warn); margin-left: 6px; }
 .officer { display: flex; align-items: center; gap: 12px; }
 .avatar {
   width: 40px; height: 40px; border-radius: 50%; flex: none;
