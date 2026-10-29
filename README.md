@@ -77,6 +77,10 @@ Only these three can sign in. The other sample officers and principals exist as 
 - **Deficiency letter (PDF)**, generated from the failed checks, rejected or missing documents and the officer's remarks.
 - **Rules & norms screen**: admins edit deadlines, faculty, land and built-up norms, required documents and assignment roles. Every change is audited.
 - **User management**: add officers and admins (they receive a code to set their password), edit who handles what, give a sample officer a real login, and suspend or restore any account.
+- **Drafts and corrections**: colleges save a draft and finish it later, and can correct their details until the review starts, and again when action is requested. The officer is notified and every change is audited.
+- **Approve with an exception**: an officer can approve despite unmet checks only by writing a reason (at least 20 characters). The reason and the waived checks are stored and shown on the application, and the admin is alerted. Missing documents can never be waived.
+- **Messages**: a thread on each application between the college and AICTE staff, with live alerts to the other side.
+- **Deadlines kept out of the compliance score**: an overdue review no longer lowers the college's score. The deadline is shown as its own flag, with who the delay is on.
 - **Phone layout**: a bottom tab bar, tables shown as cards, and full-width dialogs.
 
 ## 3-minute demo script
