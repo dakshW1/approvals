@@ -5,7 +5,7 @@ export function deficiencies(data) {
   const { app, documents } = data;
   const items = [];
   for (const c of app.compliance.checks) {
-    if (c.status !== 'fail' || ['timeline', 'docs_uploaded', 'docs_verified'].includes(c.key)) continue;
+    if (c.status !== 'fail' || ['docs_uploaded', 'docs_verified'].includes(c.key)) continue;
     items.push(`${c.label}: ${c.detail}.`);
   }
   for (const d of documents) {

@@ -472,6 +472,14 @@ export default function ApplicationDetail() {
               <ScoreRing score={c.score} />
               <CheckList checks={c.checks} />
             </div>
+            {app.deadline && (
+              <div className={`deadline-row deadline-${app.deadline.status}`}>
+                <span>
+                  <strong>Processing deadline</strong> · {app.deadline.detail} · with the {app.deadline.owner.toLowerCase()}
+                </span>
+                <span className="muted small">Tracked separately, not part of the score</span>
+              </div>
+            )}
           </section>
 
           <section className="card">

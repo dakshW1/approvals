@@ -710,3 +710,9 @@ textarea.input { height: auto; padding: 12px 14px; resize: vertical; line-height
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* Processing deadline, shown beside (not inside) the compliance score */
+.deadline-row { display: flex; justify-content: space-between; align-items: center; gap: 8px 16px; flex-wrap: wrap; padding: 12px 14px; border-radius: 14px; background: var(--surface-2); font-size: 13px; font-weight: 600; }
+.deadline-due_soon { background: var(--warn-soft); }
+.deadline-overdue { background: var(--bad-soft); color: var(--bad); }
+.deadline-overdue .muted { color: var(--bad); opacity: 0.75; }

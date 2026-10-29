@@ -4,7 +4,7 @@ import { query, one, insert, nowIso, tx } from './db.js';
 import { putFile, removeFile } from './supabase.js';
 import {
   STATUSES, OPEN_STATUSES, CATEGORIES, CATEGORY_CODES, DOC_TYPES, REQUIRED_DOCS, EXPIRING_DOC_TYPES,
-  ASSIGNMENT_RULES, SLA, NORMS, addDays, daysUntil, evaluateCompliance,
+  ASSIGNMENT_RULES, SLA, NORMS, addDays, daysUntil, evaluateCompliance, deadlineStatus,
 } from './rules.js';
 import { audit, notify, insertNotifications, alertsForApp, collegeUserIds, adminUserIds } from './alerts.js';
 
@@ -56,6 +56,7 @@ export function decorate(row, docs, now = new Date()) {
     is_draft: row.status === 'DRAFT',
     can_edit: EDITABLE_STATUSES.includes(row.status),
     days_left: isOpen ? daysUntil(row.due_date, now) : null,
+    deadline: deadlineStatus(row, now),
     pending_with: row.status === 'ACTION_REQUIRED' || row.status === 'DRAFT' ? 'Institution' : isOpen ? 'Officer' : null,
     compliance,
     docs,
@@ -339,7 +340,7 @@ export const MIN_EXCEPTION_REASON = 20;
 
 // Checks that stand between an application and approval. Missing documents can never be waived.
 export function approvalBlockers(compliance) {
-  const blocking = compliance.checks.filter((ch) => ch.key !== 'timeline' && ch.status !== 'pass');
+  const blocking = compliance.checks.filter((ch) => ch.status !== 'pass');
   return { blocking, overridable: !blocking.some((b) => b.key === 'docs_uploaded') };
 }
 

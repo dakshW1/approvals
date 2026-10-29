@@ -123,6 +123,18 @@ export const daysUntil = (date, now = new Date()) => Math.floor((new Date(date).
 
 const num = (n) => Number(n || 0).toLocaleString('en-IN');
 
+// Where an open application stands against its current deadline, and who that deadline is on.
+export function deadlineStatus(app, now = new Date()) {
+  if (!OPEN_STATUSES.includes(app.status) || !app.due_date) return null;
+  const left = daysUntil(app.due_date, now);
+  return {
+    days_left: left,
+    status: left < 0 ? 'overdue' : left <= SLA.warnDays ? 'due_soon' : 'on_track',
+    owner: app.status === 'ACTION_REQUIRED' ? 'Institution' : 'Officer',
+    detail: left < 0 ? `Overdue by ${-left} day(s)` : left === 0 ? 'Due today' : `${left} day(s) left`,
+  };
+}
+
 export function evaluateCompliance(app, docs, institutionType, now = new Date()) {
   const required = REQUIRED_DOCS[app.category] || [];
   const byType = {};
@@ -196,16 +208,8 @@ export function evaluateCompliance(app, docs, institutionType, now = new Date())
           : 'No dated certificates on file yet',
   });
 
-  if (OPEN_STATUSES.includes(app.status) && app.due_date) {
-    const left = daysUntil(app.due_date, now);
-    checks.push({
-      key: 'timeline',
-      label: 'Within processing deadline',
-      status: left < 0 ? 'fail' : left <= SLA.warnDays ? 'warn' : 'pass',
-      detail: left < 0 ? `Overdue by ${-left} day(s)` : left === 0 ? 'Due today' : `${left} day(s) left`,
-    });
-  }
-
+  // The processing deadline is deliberately not part of the score: an overdue review is the office's delay,
+  // not a sign the institution falls short of the norms. It is reported separately by deadlineStatus().
   const passed = checks.filter((c) => c.status === 'pass').length;
   const warned = checks.filter((c) => c.status === 'warn').length;
   const failed = checks.filter((c) => c.status === 'fail').length;
