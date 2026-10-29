@@ -3,8 +3,30 @@ import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../App.jsx';
 import { api, fileUrl } from '../api.js';
 import {
-  CheckList, DueChip, ErrorBox, Loading, ScoreRing, StatusBadge, ROLE_LABEL, fmtDate, fmtDateTime, useLoad,
+  CheckList, DueChip, ErrorBox, Icon, Loading, ScoreRing, StatusBadge, ROLE_LABEL, fmtDate, fmtDateTime, useLoad,
 } from '../components/ui.jsx';
+import { deficiencies, downloadDeficiencyLetter } from '../letter.js';
+
+function LetterButton({ data }) {
+  const { meta } = useAuth();
+  const [busy, setBusy] = useState(false);
+  const count = deficiencies(data).length;
+  if (data.app.status === 'APPROVED' || count === 0) return null;
+  const download = async () => {
+    setBusy(true);
+    try {
+      await downloadDeficiencyLetter(data, meta.SLA);
+      api(`/applications/${data.app.id}/letter`, { method: 'POST' }).catch(() => {});
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button className="btn btn-sm btn-ghost" onClick={download} disabled={busy} title={`${count} deficiencies`}>
+      <Icon name="file" size={16} /> {busy ? 'Preparing…' : 'Deficiency letter'}
+    </button>
+  );
+}
 
 const DOC_STATUS = {
   VERIFIED: { label: 'Verified', tone: 'ok' },
@@ -275,6 +297,7 @@ export default function ApplicationDetail() {
           <StatusBadge status={app.status} />
           <DueChip app={app} />
           {app.pending_with && <span className="muted small">Pending with {app.pending_with.toLowerCase()}</span>}
+          <LetterButton data={data} />
         </div>
         <Stepper app={app} history={history} />
       </div>
