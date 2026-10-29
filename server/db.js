@@ -167,6 +167,16 @@ export async function migrate() {
       updated_by INTEGER REFERENCES profiles(id) ON DELETE SET NULL
     );
     ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+    -- Conversation between the institution and AICTE staff on one application.
+    CREATE TABLE IF NOT EXISTS comments (
+      id SERIAL PRIMARY KEY,
+      application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES profiles(id) ON DELETE SET NULL,
+      body TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_comments_app ON comments(application_id, created_at);
+    ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
     CREATE INDEX IF NOT EXISTS idx_docs_app ON documents(application_id);
     CREATE INDEX IF NOT EXISTS idx_hist_app ON status_history(application_id);
     CREATE INDEX IF NOT EXISTS idx_audit_app ON audit_log(application_id);
@@ -200,6 +210,6 @@ export async function migrate() {
 
 export async function dropAll() {
   await pool.query(`
-    DROP TABLE IF EXISTS settings, notifications, audit_log, status_history, documents, applications, profiles, institutions CASCADE;
+    DROP TABLE IF EXISTS comments, settings, notifications, audit_log, status_history, documents, applications, profiles, institutions CASCADE;
   `);
 }

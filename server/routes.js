@@ -11,7 +11,7 @@ import { rulesInfo, saveRules, resetRules } from './settings.js';
 import { listUsers, createUser, updateUser, enableLogin, setSuspended } from './users.js';
 import { mailEnabled } from './mailer.js';
 import {
-  HttpError, canView, listApplications, getApplication, createApplication, updateApplication, previewCompliance, uploadDocument,
+  HttpError, canView, listApplications, getApplication, createApplication, updateApplication, addComment, previewCompliance, uploadDocument,
   reviewDocument, changeStatus, assignOfficer, officerWorkload, dashboard,
 } from './workflow.js';
 
@@ -99,6 +99,10 @@ router.get('/applications/:id', ah(async (req, res) => res.json(await getApplica
 router.patch('/applications/:id', requireRole('COLLEGE'), ah(async (req, res) => {
   await updateApplication(Number(req.params.id), req.user, req.body || {});
   res.json(await getApplication(Number(req.params.id), req.user));
+}));
+
+router.post('/applications/:id/comments', ah(async (req, res) => {
+  res.status(201).json({ comments: await addComment(Number(req.params.id), req.user, req.body?.body) });
 }));
 
 router.post('/applications/:id/status', ah(async (req, res) => {

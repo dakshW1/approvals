@@ -400,6 +400,29 @@ export async function changeStatus(appId, user, to, remark, { override = false }
   await alertsForApp(appId);
 }
 
+const COMMENTS_SQL = `SELECT c.id, c.body, c.created_at, c.user_id, u.name AS user_name, u.role AS user_role
+  FROM comments c LEFT JOIN profiles u ON u.id = c.user_id WHERE c.application_id = ? ORDER BY c.created_at, c.id`;
+
+export async function addComment(appId, user, body) {
+  const app = await one('SELECT * FROM applications WHERE id = ?', [appId]);
+  if (!app || !canView(app, user)) throw new HttpError(404, 'Application not found.');
+  if (app.status === 'DRAFT') throw new HttpError(400, 'Submit the application before messaging AICTE about it.');
+  const text = String(body || '').trim();
+  if (!text) throw new HttpError(400, 'Write a message first.');
+  if (text.length > 2000) throw new HttpError(400, 'Keep messages under 2,000 characters.');
+  await insert('INSERT INTO comments (application_id, user_id, body, created_at) VALUES (?,?,?,?)', [appId, user.id, text, nowIso()]);
+  const snippet = text.length > 120 ? `${text.slice(0, 117)}…` : text;
+  await audit(user.id, 'MESSAGE_SENT', 'application', appId, snippet, appId);
+  // Tell the other side: staff messages go to the institution, institution messages to the officer.
+  const recipients = new Set();
+  if (user.role !== 'COLLEGE') for (const u of await collegeUserIds(app.institution_id)) recipients.add(u);
+  if (user.role !== 'OFFICER' && app.assigned_officer_id) recipients.add(app.assigned_officer_id);
+  recipients.delete(user.id);
+  const who = user.role === 'COLLEGE' ? (user.institution?.name || 'The institution') : user.name;
+  await insertNotifications([...recipients].map((u) => [u, appId, 'MESSAGE', 'info', `${who} on ${app.app_no}: "${snippet}"`, null]));
+  return query(COMMENTS_SQL, [appId]);
+}
+
 export async function getApplication(appId, user) {
   const row = await one(`${BASE_SQL} WHERE a.id = ?`, [appId]);
   if (!row || !canView(row, user)) throw new HttpError(404, 'Application not found.');
@@ -411,7 +434,7 @@ export async function getApplication(appId, user) {
     expiring: EXPIRING_DOC_TYPES.includes(t),
     doc: byType[t] || null,
   }));
-  const [history, activity, institution, officers] = await Promise.all([
+  const [history, activity, institution, officers, comments] = await Promise.all([
     query(
       `SELECT h.*, u.name AS user_name, u.role AS user_role FROM status_history h
        LEFT JOIN profiles u ON u.id = h.user_id WHERE h.application_id = ? ORDER BY h.created_at, h.id`,
@@ -424,6 +447,7 @@ export async function getApplication(appId, user) {
     ),
     one('SELECT * FROM institutions WHERE id = ?', [app.institution_id]),
     user.role === 'ADMIN' ? officerWorkload() : Promise.resolve(undefined),
+    query(COMMENTS_SQL, [appId]),
   ]);
   const assignment = activity.find((a) => a.action === 'OFFICER_ASSIGNED' || a.action === 'OFFICER_REASSIGNED');
   const isOfficer = user.role === 'OFFICER' || user.role === 'ADMIN';
@@ -434,6 +458,7 @@ export async function getApplication(appId, user) {
     documents,
     history,
     activity,
+    comments,
     assignment_reason: assignment?.details || null,
     actions: allowedActions(app, user),
     approval: app.status === 'UNDER_REVIEW' ? { ...approvalBlockers(app.compliance), minReason: MIN_EXCEPTION_REASON } : null,

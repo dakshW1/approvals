@@ -27,8 +27,9 @@ function NotificationBell() {
     if (!supabase) return undefined;
     const channel = supabase
       .channel(`notifications-${user.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
         load();
+        window.dispatchEvent(new CustomEvent('portal:notification', { detail: payload.new }));
         setPing(true);
         setTimeout(() => setPing(false), 1600);
       })

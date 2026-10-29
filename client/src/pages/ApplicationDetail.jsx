@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAuth } from '../App.jsx';
 import { api, fileUrl } from '../api.js';
@@ -291,6 +291,77 @@ function ActionPanel({ data, onChanged }) {
   );
 }
 
+function Messages({ data, onChanged }) {
+  const { user } = useAuth();
+  const [text, setText] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const listRef = useRef(null);
+  const { app, comments } = data;
+
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+  }, [comments.length]);
+
+  if (app.is_draft) return null;
+  const send = async (e) => {
+    e?.preventDefault();
+    if (!text.trim()) return;
+    setBusy(true);
+    setError('');
+    try {
+      const r = await api(`/applications/${app.id}/comments`, { method: 'POST', body: { body: text } });
+      onChanged({ ...data, comments: r.comments });
+      setText('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const other = user.role === 'COLLEGE' ? 'the scrutiny officer' : 'the institution';
+
+  return (
+    <section className="card">
+      <div className="card-head">
+        <h2>Messages</h2>
+        <span className="muted small">{comments.length ? `${comments.length} message${comments.length > 1 ? 's' : ''}` : 'No messages yet'}</span>
+      </div>
+      {comments.length > 0 && (
+        <ol className="thread" ref={listRef}>
+          {comments.map((c) => {
+            const mine = c.user_id === user.id;
+            return (
+              <li key={c.id} className={`bubble ${mine ? 'mine' : ''}`}>
+                <div className="bubble-meta">
+                  {mine ? 'You' : c.user_role === 'COLLEGE' ? 'Institution' : c.user_name || 'AICTE'}
+                  {!mine && c.user_role && c.user_role !== 'COLLEGE' && <span> · {ROLE_LABEL[c.user_role]}</span>}
+                  <span> · {fmtDateTime(c.created_at)}</span>
+                </div>
+                <div className="bubble-body">{c.body}</div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+      <form className="composer" onSubmit={send}>
+        <textarea
+          id="message-text"
+          className="input"
+          rows={2}
+          placeholder={`Ask or answer ${other}… (Ctrl+Enter to send)`}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => (e.ctrlKey || e.metaKey) && e.key === 'Enter' && send()}
+          maxLength={2000}
+        />
+        <button className="btn btn-primary btn-sm" disabled={busy || !text.trim()}>{busy ? 'Sending…' : 'Send'}</button>
+      </form>
+      {error && <div className="alert alert-bad">{error}</div>}
+    </section>
+  );
+}
+
 function Reassign({ data, onChanged }) {
   const [officer, setOfficer] = useState('');
   const [error, setError] = useState('');
@@ -331,6 +402,13 @@ export default function ApplicationDetail() {
   const { user } = useAuth();
   const { data, error, loading, setData } = useLoad(() => api(`/applications/${id}`), [id]);
   const [tab, setTab] = useState('timeline');
+  useEffect(() => {
+    const onLive = (e) => {
+      if (String(e.detail?.application_id) === String(id)) api(`/applications/${id}`).then(setData).catch(() => {});
+    };
+    window.addEventListener('portal:notification', onLive);
+    return () => window.removeEventListener('portal:notification', onLive);
+  }, [id]);
 
   if (loading && !data) return <Loading />;
   if (error) return <ErrorBox error={error} />;
@@ -432,6 +510,8 @@ export default function ApplicationDetail() {
 
         <div className="col">
           <ActionPanel data={data} onChanged={setData} />
+
+          <Messages data={data} onChanged={setData} />
 
           <section className="card">
             <h2>Assigned officer</h2>
